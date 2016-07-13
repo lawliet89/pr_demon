@@ -39,3 +39,20 @@ fn read_config(path: &str) -> Result<BitbucketCredentials, String> {
         Err(err) => return Err(format!("Unable to decode JSON value {}", err))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{BitbucketCredentials, read_config};
+
+    #[test]
+    fn it_reads_and_parses_a_config_file() {
+        let expected = BitbucketCredentials {
+            username: "username".to_owned(),
+            password: "password".to_owned()
+        };
+
+        let actual = read_config("test/fixtures/config.json").unwrap();
+
+        assert_eq!(expected, actual);
+    }
+}
