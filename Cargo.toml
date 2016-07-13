@@ -1,0 +1,8 @@
+[package]
+name = "pr_demon"
+version = "0.1.0"
+authors = ["Yong Wen Chua <ida@yongwen.xyz>"]
+
+[dependencies]
+hyper = "*"
+rustc-serialize = "*"
