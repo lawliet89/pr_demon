@@ -2,6 +2,7 @@ extern crate hyper;
 extern crate rustc_serialize;
 
 mod bitbucket;
+mod teamcity;
 
 use std::env;
 use std::fs::File;
@@ -9,6 +10,12 @@ use std::io::Read;
 use rustc_serialize::json;
 use hyper::client::Client;
 use hyper::header::{Headers, Authorization, Basic};
+
+#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+struct Config {
+    teamcity: TeamcityCredentials,
+    bitbucket: BitbucketCredentials
+}
 
 trait UsernameAndPassword {
     fn username(&self) -> &String;
@@ -32,6 +39,24 @@ impl UsernameAndPassword for BitbucketCredentials {
     }
 }
 
+#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+struct TeamcityCredentials {
+    username: String,
+    password: String,
+    endpoint: String
+}
+
+impl UsernameAndPassword for TeamcityCredentials {
+    fn username(&self) -> &String {
+        &self.username
+    }
+
+    fn password(&self) -> &String {
+        &self.password
+    }
+}
+
+
 fn main() {
     let config_path = match env::args().nth(1) {
         Some(x) => x,
@@ -42,11 +67,11 @@ fn main() {
         Err(err) => panic!(err)
     };
 
-    let parsed_result = get_pr(&config);
+    let parsed_result = get_pr(&config.bitbucket);
     println!("{:#?}", parsed_result);
 }
 
-fn read_config(path: &str) -> Result<BitbucketCredentials, String> {
+fn read_config(path: &str) -> Result<Config, String> {
     let mut file = match File::open(path) {
         Ok(f) => f,
         Err(err) => return Err(format!("Unable to read file because: {}", err))
@@ -98,16 +123,24 @@ fn get_pr(config: &BitbucketCredentials)
 
 #[cfg(test)]
 mod tests {
-    use super::{BitbucketCredentials, read_config};
+    use super::{Config, TeamcityCredentials, BitbucketCredentials, read_config};
 
     #[test]
     fn it_reads_and_parses_a_config_file() {
-        let expected = BitbucketCredentials {
-            username: "username".to_owned(),
-            password: "password".to_owned()
+        let expected = Config {
+            bitbucket: BitbucketCredentials {
+                username: "username".to_owned(),
+                password: "password".to_owned(),
+                endpoint: "http://www.foobar.com/rest".to_owned()
+            },
+            teamcity: TeamcityCredentials {
+                username: "username".to_owned(),
+                password: "password".to_owned(),
+                endpoint: "http://www.foobar.com/rest".to_owned()
+            }
         };
 
-        let actual = read_config("test/fixtures/config.json").unwrap();
+        let actual = read_config("tests/fixtures/config.json").unwrap();
 
         assert_eq!(expected, actual);
     }

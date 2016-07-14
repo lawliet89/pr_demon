@@ -1,5 +1,12 @@
 {
-  "username": "username",
-  "password": "password",
-  "endpoint": "http://www.foobar.com/rest"
+  "teamcity": {
+    "username": "username",
+    "password": "password",
+    "endpoint": "http://www.foobar.com/rest"
+  },
+  "bitbucket": {
+    "username": "username",
+    "password": "password",
+    "endpoint": "http://www.foobar.com/rest"
+  }
 }
