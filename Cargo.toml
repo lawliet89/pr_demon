@@ -6,3 +6,4 @@ authors = ["Yong Wen Chua <ida@yongwen.xyz>"]
 [dependencies]
 hyper = "*"
 rustc-serialize = "*"
+time = "*"
