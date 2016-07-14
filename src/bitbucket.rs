@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::vec::Vec;
 use std::option::Option;
 
@@ -26,7 +27,8 @@ pub struct PullRequest {
     locked: bool,
     author: PullRequestParticipant,
     reviewers: Vec<PullRequestParticipant>,
-    participants: Vec<PullRequestParticipant>
+    participants: Vec<PullRequestParticipant>,
+    links: BTreeMap<String, Vec<Link>>
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
@@ -39,12 +41,19 @@ pub struct GitReference {
 pub struct Repository {
     slug: String,
     name: Option<String>,
-    project: Project
+    project: Project,
+    public: bool,
+    links: BTreeMap<String, Vec<Link>>
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct Project {
-    key: String
+    key: String,
+    id: i32,
+    name: String,
+    description: String,
+    public: bool,
+    links: BTreeMap<String, Vec<Link>>
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
@@ -61,6 +70,13 @@ pub struct User {
     id: i32,
     displayName: String,
     active: bool,
-    slug: String
+    slug: String,
+    links: BTreeMap<String, Vec<Link>>
     // type: String
+}
+
+#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+pub struct Link {
+    href: String,
+    name: Option<String>
 }
