@@ -35,6 +35,22 @@ pub struct PullRequest {
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
+pub struct Comment {
+    pub id: i32,
+    pub version: i32,
+    pub text: String,
+    pub author: User,
+    pub createdDate: i64,
+    pub updatedDate: i64
+}
+
+#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+pub struct CommentSubmit {
+    pub text: String
+}
+
+#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[allow(non_snake_case)]
 pub struct GitReference {
     pub id: String,
     pub repository: Repository,

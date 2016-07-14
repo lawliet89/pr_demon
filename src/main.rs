@@ -30,7 +30,9 @@ trait UsernameAndPassword {
 struct BitbucketCredentials {
     username: String,
     password: String,
-    endpoint: String
+    base_url: String,
+    project_slug: String,
+    repo_slug: String
 }
 
 impl UsernameAndPassword for BitbucketCredentials {
@@ -137,7 +139,11 @@ fn main() {
                         continue;
                     },
                     Ok(queued) => {
-                        println!("{}Build Queued: {}", tabs(2), queued.webUrl)
+                        println!("{}Build Queued: {}", tabs(2), queued.webUrl);
+                        match post_queued_comment(&queued.webUrl, pr_commit, pr.id, &config.bitbucket) {
+                            Ok(x) => {},
+                            Err(err) => println!("{}Error submitting comment: {}", tabs(2), err)
+                        };
                     }
                 }
             } else {
@@ -197,13 +203,22 @@ fn add_content_type_xml_header(headers: &mut Headers) {
     );
 }
 
+fn add_content_type_json_header(headers: &mut Headers) {
+    headers.set(
+        ContentType(Mime(TopLevel::Application, SubLevel::Json,
+                         vec![(Attr::Charset, Value::Utf8)]))
+    );
+}
+
 fn get_pr(config: &BitbucketCredentials)
     -> Result<bitbucket::PagedApi<bitbucket::PullRequest>, String> {
 
     let mut headers = Headers::new();
     add_authorization_header(&mut headers, config as &UsernameAndPassword);
     let client = Client::new();
-    let mut response = match client.get(&config.endpoint).headers(headers).send() {
+    let url = format!("{}/projects/{}/repos/{}/pull-requests",
+        config.base_url, config.project_slug, config.repo_slug);
+    let mut response = match client.get(&url).headers(headers).send() {
         Ok(x) => x,
         Err(err) => return Err(format!("Unable to get list of PR: {}", err))
     };
@@ -284,6 +299,50 @@ fn queue_build(config: &TeamcityCredentials, branch: &str)
         Ok(x) => Ok(x),
         Err(err) =>  Err(format!("Error parsing response: {} {}", json_string, err))
     }
+}
+
+fn post_comment(comment: &str, pr_id: i32, config: &BitbucketCredentials)
+        -> Result<bitbucket::Comment, String> {
+    let mut headers = Headers::new();
+    add_authorization_header(&mut headers, config as &UsernameAndPassword);
+    add_accept_json_header(&mut headers);
+    add_content_type_json_header(&mut headers);
+
+    let client = Client::new();
+    // FIXME: Format a proper template instead!
+    let body = json::encode(&bitbucket::CommentSubmit {
+        text: comment.to_owned()
+    }).unwrap();
+    let url = format!("{}/projects/{}/repos/{}/pull-requests/{}/comments",
+            config.base_url, config.project_slug, config.repo_slug, pr_id);
+    let mut response = match client
+            .post(&url)
+            .body(&body)
+            .headers(headers).send() {
+        Ok(x) => x,
+        Err(err) => return Err(format!("Unable to submit comment: {}", err))
+    };
+
+    match response.status {
+        hyper::status::StatusCode::Ok => (),
+        e @ _ => return Err(e.to_string())
+    };
+
+    let mut json_string = String::new();
+    if let Err(err) = response.read_to_string(&mut json_string) {
+        return Err(format!("Unable to schedule build: {}", err))
+    }
+
+    match json::decode(&json_string) {
+        Ok(x) => Ok(x),
+        Err(err) =>  Err(format!("Error parsing response: {} {}", json_string, err))
+    }
+}
+
+fn post_queued_comment(build_url: &str, commit_id: &str, pr_id: i32, config: &BitbucketCredentials)
+        -> Result<bitbucket::Comment, String> {
+    let comment = format!("⏳ [Build]({}) for commit {} queued", build_url, commit_id);
+    post_comment(&comment, pr_id, config)
 }
 
 #[cfg(test)]
