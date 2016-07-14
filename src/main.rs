@@ -9,7 +9,9 @@ use std::fs::File;
 use std::io::Read;
 use rustc_serialize::json;
 use hyper::client::Client;
-use hyper::header::{Headers, Authorization, Basic};
+use hyper::header::{Headers, Authorization, Basic, Accept, qitem};
+use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
+
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 struct Config {
@@ -69,6 +71,9 @@ fn main() {
 
     let parsed_result = get_pr(&config.bitbucket);
     println!("{:#?}", parsed_result);
+
+    let parsed_result = get_builds(&config.teamcity);
+    println!("{:#?}", parsed_result);
 }
 
 fn read_config(path: &str) -> Result<Config, String> {
@@ -88,7 +93,7 @@ fn read_config(path: &str) -> Result<Config, String> {
     }
 }
 
-fn add_authorization_headers(headers: &mut Headers, credentials: &UsernameAndPassword) {
+fn add_headers(headers: &mut Headers, credentials: &UsernameAndPassword) {
     headers.set(
        Authorization(
            Basic {
@@ -97,13 +102,19 @@ fn add_authorization_headers(headers: &mut Headers, credentials: &UsernameAndPas
            }
        )
     );
+    headers.set(
+        Accept(vec![
+            qitem(Mime(TopLevel::Application, SubLevel::Json,
+                       vec![(Attr::Charset, Value::Utf8)])),
+        ])
+    );
 }
 
 fn get_pr(config: &BitbucketCredentials)
     -> Result<bitbucket::PagedApi<bitbucket::PullRequest>, String> {
 
     let mut headers = Headers::new();
-    add_authorization_headers(&mut headers, config as &UsernameAndPassword);
+    add_headers(&mut headers, config as &UsernameAndPassword);
     let client = Client::new();
     let mut response = match client.get(&config.endpoint).headers(headers).send() {
         Ok(x) => x,
@@ -119,6 +130,28 @@ fn get_pr(config: &BitbucketCredentials)
         Ok(x) => Ok(x),
         Err(err) =>  Err(format!("Error parsing response: {}", err))
     }
+}
+
+fn get_builds(config: &TeamcityCredentials)
+    -> Result<teamcity::Build, String> {
+    let mut headers = Headers::new();
+    add_headers(&mut headers, config as &UsernameAndPassword);
+    let client = Client::new();
+    let mut response = match client.get(&config.endpoint).headers(headers).send() {
+        Ok(x) => x,
+        Err(err) => return Err(format!("Unable to get list of Builds: {}", err))
+    };
+
+    let mut json_string = String::new();
+    if let Err(err) = response.read_to_string(&mut json_string) {
+        return Err(format!("Unable to get a list of Builds: {}", err))
+    }
+
+    match json::decode(&json_string) {
+        Ok(x) => Ok(x),
+        Err(err) =>  Err(format!("Error parsing response: {}", err))
+    }
+
 }
 
 #[cfg(test)]

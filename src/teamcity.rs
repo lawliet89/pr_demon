@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
-struct Build {
+pub struct Build {
     id: i32,
     buildTypeId: String,
-    staus: String,
+    status: String,
     state: String,
     branchName: String,
     defaultBranch: bool,
@@ -28,7 +28,7 @@ struct Build {
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
-struct BuildType {
+pub struct BuildType {
     id: String,
     name: String,
     projectName: String,
@@ -38,13 +38,13 @@ struct BuildType {
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
-struct LastChanges {
+pub struct LastChanges {
     count: i32,
     change: Vec<Change>
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
-struct Change {
+pub struct Change {
     id: i32,
     version: String,
     username: String,
@@ -54,23 +54,23 @@ struct Change {
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
-struct Href {
+pub struct Href {
     href: String
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
-struct Revisions {
+pub struct Revisions {
     count: i32,
     revision: Vec<Revision>
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
-struct Revision {
+pub struct Revision {
     version: String
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
-struct Agent {
+pub struct Agent {
     id: i32,
     name: String,
     typeId: i32,
@@ -78,7 +78,7 @@ struct Agent {
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
-struct TestOccurences {
+pub struct TestOccurences {
     count: i32,
     href: String,
     passed: i32,
@@ -87,13 +87,13 @@ struct TestOccurences {
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
-struct Properties {
+pub struct Properties {
     count: i32,
     property: Vec<Property>
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
-struct Property {
+pub struct Property {
     name: String,
     value: String
 }
