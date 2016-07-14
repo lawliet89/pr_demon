@@ -2,7 +2,11 @@
   "teamcity": {
     "username": "username",
     "password": "password",
-    "endpoint": "http://www.foobar.com/rest"
+    "build_id": "foobar",
+    "endpoints": {
+      "builds.list": "http://www.foobar.com/rest",
+      "build.queue": "http://www.foobar.com/rest/queue"
+    }
   },
   "bitbucket": {
     "username": "username",

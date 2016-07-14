@@ -1,32 +1,36 @@
-use std::collections::BTreeMap;
+#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[allow(non_camel_case_types)]
+pub enum BuildState {
+    queued,
+    finished
+}
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
 pub struct Build {
     pub id: i32,
     pub buildTypeId: String,
-    pub status: String,
-    pub state: String,
+    pub status: Option<String>,
+    pub state: BuildState, // queued, finished,
     pub branchName: String,
     pub defaultBranch: Option<bool>,
     pub href: String,
     pub webUrl: String,
-    pub statusText: String,
+    pub statusText: Option<String>,
     pub buildType: BuildType,
     pub queuedDate: String,
-    pub startDate: String,
-    pub finishDate: String,
-    pub triggered: BTreeMap<String, String>,
-    pub lastChanges: LastChanges,
+    pub startDate: Option<String>,
+    pub finishDate:  Option<String>,
+    pub lastChanges: Option<LastChanges>,
     pub changes: Href,
     pub revisions: Revisions,
-    pub agent: Agent,
-    pub testOccurrences: TestOccurences,
+    pub agent: Option<Agent>,
+    pub testOccurrences: Option<TestOccurences>,
     pub artifacts: Href,
-    pub relatedIssues: Href,
+    pub relatedIssues: Option<Href>,
     pub properties: Properties,
-    pub statistics: Href
-    // 
+    pub statistics: Option<Href>
+    //
     // "running-info": {
     //   "percentageComplete": 96,
     //   "elapsedSeconds": 851,
@@ -74,7 +78,7 @@ pub struct Href {
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct Revisions {
     pub count: i32,
-    pub revision: Vec<Revision>
+    pub revision: Option<Vec<Revision>>
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
