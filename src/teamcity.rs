@@ -1,99 +1,113 @@
 use std::collections::BTreeMap;
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[allow(non_snake_case)]
 pub struct Build {
-    id: i32,
-    buildTypeId: String,
-    status: String,
-    state: String,
-    branchName: String,
-    defaultBranch: bool,
-    href: String,
-    webUrl: String,
-    statusText: String,
-    buildType: BuildType,
-    queuedDate: String,
-    startDate: String,
-    finishDate: String,
-    triggered: BTreeMap<String, String>,
-    lastChanges: LastChanges,
-    changes: Href,
-    revisions: Revisions,
-    agent: Agent,
-    testOccurrences: TestOccurences,
-    artifacts: Href,
-    relatedIssues: Href,
-    properties: Properties,
-    statistics: Href
+    pub id: i32,
+    pub buildTypeId: String,
+    pub status: String,
+    pub state: String,
+    pub branchName: String,
+    pub defaultBranch: Option<bool>,
+    pub href: String,
+    pub webUrl: String,
+    pub statusText: String,
+    pub buildType: BuildType,
+    pub queuedDate: String,
+    pub startDate: String,
+    pub finishDate: String,
+    pub triggered: BTreeMap<String, String>,
+    pub lastChanges: LastChanges,
+    pub changes: Href,
+    pub revisions: Revisions,
+    pub agent: Agent,
+    pub testOccurrences: TestOccurences,
+    pub artifacts: Href,
+    pub relatedIssues: Href,
+    pub properties: Properties,
+    pub statistics: Href
+    // 
+    // "running-info": {
+    //   "percentageComplete": 96,
+    //   "elapsedSeconds": 851,
+    //   "estimatedTotalSeconds": 895,
+    //   "currentStageText": "Step 2/3: + bundle exec rubocop -r /usr/lib64/ruby/gems/2.2.0/gems/rubocop-junit-formatter-0.1.3/lib/rubocop/formatter/junit_formatter.rb --format RuboCop::Formatter::JUnitFormatter",
+    //   "outdated": false,
+    //   "probablyHanging": false
+    // },
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[allow(non_snake_case)]
 pub struct BuildType {
-    id: String,
-    name: String,
-    projectName: String,
-    projectId: String,
-    href: String,
-    webUrl: String
+    pub id: String,
+    pub name: String,
+    pub projectName: String,
+    pub projectId: String,
+    pub href: String,
+    pub webUrl: String
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[allow(non_snake_case)]
 pub struct LastChanges {
-    count: i32,
-    change: Vec<Change>
+    pub count: i32,
+    pub change: Vec<Change>
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[allow(non_snake_case)]
 pub struct Change {
-    id: i32,
-    version: String,
-    username: String,
-    date: String,
-    href: String,
-    webUrl: String
+    pub id: i32,
+    pub version: String,
+    pub username: String,
+    pub date: String,
+    pub href: String,
+    pub webUrl: String
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct Href {
-    href: String
+    pub href: String
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct Revisions {
-    count: i32,
-    revision: Vec<Revision>
+    pub count: i32,
+    pub revision: Vec<Revision>
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct Revision {
-    version: String
+    pub version: String
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[allow(non_snake_case)]
 pub struct Agent {
-    id: i32,
-    name: String,
-    typeId: i32,
-    href: String
+    pub id: i32,
+    pub name: String,
+    pub typeId: i32,
+    pub href: String
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct TestOccurences {
-    count: i32,
-    href: String,
-    passed: i32,
-    ignored: i32,
-    default: bool
+    pub count: i32,
+    pub href: String,
+    pub passed: i32,
+    pub ignored: i32,
+    pub default: bool
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct Properties {
-    count: i32,
-    property: Vec<Property>
+    pub count: i32,
+    pub property: Vec<Property>
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct Property {
-    name: String,
-    value: String
+    pub name: String,
+    pub value: String
 }

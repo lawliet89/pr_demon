@@ -7,6 +7,7 @@ mod teamcity;
 use std::env;
 use std::fs::File;
 use std::io::Read;
+use std::iter;
 use rustc_serialize::json;
 use hyper::client::Client;
 use hyper::header::{Headers, Authorization, Basic, Accept, qitem};
@@ -58,22 +59,65 @@ impl UsernameAndPassword for TeamcityCredentials {
     }
 }
 
-
 fn main() {
     let config_path = match env::args().nth(1) {
         Some(x) => x,
-        None => panic!("Usage ./app path_to_config.json")
+        None => panic!("Usage ./pr_demon path_to_config.json")
     };
     let config = match read_config(&config_path) {
         Ok(x) => x,
         Err(err) => panic!(err)
     };
 
-    let parsed_result = get_pr(&config.bitbucket);
-    println!("{:#?}", parsed_result);
+    let pull_requests = get_pr(&config.bitbucket)
+        .expect("Error getting PR!");
+    // println!("{:#?}", pull_requests);
 
-    let parsed_result = get_builds(&config.teamcity);
-    println!("{:#?}", parsed_result);
+    println!("{} Open Pull Requests Found", pull_requests.size);
+
+    for pr in &pull_requests.values {
+        println!("{}Pull Request #{} ({})", tabs(1), pr.id, pr.links["self"][0].href);
+        let git_ref = &pr.fromRef.id;
+        let branch_name = git_ref.split('/').next_back().unwrap();
+        let pr_commit = &pr.fromRef.latestCommit;
+        println!("{}Branch: {}", tabs(2), branch_name);
+        println!("{}Commit: {}", tabs(2), branch_name);
+        println!("{}Finding latest build from branch", tabs(2));
+
+        let mut run_build = false;
+        let builds = get_builds(&config.teamcity, &branch_name);
+
+        match builds {
+            Ok(ref build) => {
+                let build_commit = &build.lastChanges.change.first().unwrap().version;
+                println!("{}Build found with commit {}", tabs(2), build_commit);
+                if build_commit == pr_commit {
+                    println!("{}Commit matches -- skipping", tabs(2));
+                } else {
+                    println!("{}Commit does not match -- scheduling build", tabs(2));
+                    run_build = true;
+                }
+            },
+            Err(ref err) if err == "404 Not Found" => {
+                println!("{}Build does not exist -- running build", tabs(2));
+                run_build = true;
+            },
+            Err(e @ _) => {
+                println!("{} Error fetching builds: {}", tabs(2), e);
+            }
+        };
+
+        if run_build {
+            println!("{}Scheduling build", tabs(2));
+        } else {
+            println!("{}Build exists", tabs(2));
+        }
+    }
+}
+
+fn tabs(x: usize) -> String {
+    // https://stackoverflow.com/questions/31216646/repeat-string-with-integer-multiplication
+    iter::repeat("    ").take(x).collect()
 }
 
 fn read_config(path: &str) -> Result<Config, String> {
@@ -132,14 +176,21 @@ fn get_pr(config: &BitbucketCredentials)
     }
 }
 
-fn get_builds(config: &TeamcityCredentials)
+fn get_builds(config: &TeamcityCredentials, branch: &str)
     -> Result<teamcity::Build, String> {
     let mut headers = Headers::new();
     add_headers(&mut headers, config as &UsernameAndPassword);
     let client = Client::new();
-    let mut response = match client.get(&config.endpoint).headers(headers).send() {
+    // FIXME: Format a proper URL instead
+    let mut response = match client.get(&(format!("{}{}", config.endpoint, branch)))
+            .headers(headers).send() {
         Ok(x) => x,
         Err(err) => return Err(format!("Unable to get list of Builds: {}", err))
+    };
+
+    match response.status {
+        hyper::status::StatusCode::Ok => (),
+        e @ _ => return Err(e.to_string())
     };
 
     let mut json_string = String::new();
@@ -149,9 +200,8 @@ fn get_builds(config: &TeamcityCredentials)
 
     match json::decode(&json_string) {
         Ok(x) => Ok(x),
-        Err(err) =>  Err(format!("Error parsing response: {}", err))
+        Err(err) =>  Err(format!("Error parsing response: {} {}", json_string, err))
     }
-
 }
 
 #[cfg(test)]

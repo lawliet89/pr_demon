@@ -3,80 +3,86 @@ use std::vec::Vec;
 use std::option::Option;
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[allow(non_snake_case)]
 pub struct PagedApi<T> {
-    size: i32,
-    limit: i32,
-    isLastPage: bool,
-    values: Vec<T>,
-    start: i32
+    pub size: i32,
+    pub limit: i32,
+    pub isLastPage: bool,
+    pub values: Vec<T>,
+    pub start: i32
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[allow(non_snake_case)]
 pub struct PullRequest {
-    id: i32,
-    version: i32,
-    title: String,
-    description: String,
-    state: String,
-    open:  bool,
-    closed: bool,
-    createdDate: i64,
-    updatedDate: i64,
-    fromRef: GitReference,
-    toRef: GitReference,
-    locked: bool,
-    author: PullRequestParticipant,
-    reviewers: Vec<PullRequestParticipant>,
-    participants: Vec<PullRequestParticipant>,
-    links: BTreeMap<String, Vec<Link>>
+    pub id: i32,
+    pub version: i32,
+    pub title: String,
+    pub description: Option<String>,
+    pub state: String,
+    pub open:  bool,
+    pub closed: bool,
+    pub createdDate: i64,
+    pub updatedDate: i64,
+    pub fromRef: GitReference,
+    pub toRef: GitReference,
+    pub locked: bool,
+    pub author: PullRequestParticipant,
+    pub reviewers: Vec<PullRequestParticipant>,
+    pub participants: Vec<PullRequestParticipant>,
+    pub links: BTreeMap<String, Vec<Link>>
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[allow(non_snake_case)]
 pub struct GitReference {
-    id: String,
-    repository: Repository
+    pub id: String,
+    pub repository: Repository,
+    pub displayId: String,
+    pub latestCommit: String
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct Repository {
-    slug: String,
-    name: Option<String>,
-    project: Project,
-    public: bool,
-    links: BTreeMap<String, Vec<Link>>
+    pub slug: String,
+    pub name: Option<String>,
+    pub project: Project,
+    pub public: bool,
+    pub links: BTreeMap<String, Vec<Link>>
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct Project {
-    key: String,
-    id: i32,
-    name: String,
-    description: String,
-    public: bool,
-    links: BTreeMap<String, Vec<Link>>
+    pub key: String,
+    pub id: i32,
+    pub name: String,
+    pub description: String,
+    pub public: bool,
+    pub links: BTreeMap<String, Vec<Link>>
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct PullRequestParticipant {
-    user: User,
-    role: String,
-    approved: bool
+    pub user: User,
+    pub role: String,
+    pub approved: bool
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[allow(non_snake_case)]
 pub struct User {
-    name: String,
-    emailAddress: String,
-    id: i32,
-    displayName: String,
-    active: bool,
-    slug: String,
-    links: BTreeMap<String, Vec<Link>>
+    pub name: String,
+    pub emailAddress: String,
+    pub id: i32,
+    pub displayName: String,
+    pub active: bool,
+    pub slug: String,
+    pub links: BTreeMap<String, Vec<Link>>
     // type: String
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct Link {
-    href: String,
-    name: Option<String>
+    pub href: String,
+    pub name: Option<String>
 }
