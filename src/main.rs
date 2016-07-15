@@ -2,6 +2,7 @@ extern crate hyper;
 extern crate rustc_serialize;
 extern crate url;
 
+mod rest;
 mod bitbucket;
 mod teamcity;
 
@@ -21,7 +22,7 @@ struct Config {
     bitbucket: bitbucket::BitbucketCredentials
 }
 
-trait UsernameAndPassword {
+pub trait UsernameAndPassword {
     fn username(&self) -> &String;
     fn password(&self) -> &String;
 }
@@ -229,46 +230,12 @@ fn read_config(path: &str) -> Result<Config, String> {
     }
 }
 
-fn add_authorization_header(headers: &mut Headers, credentials: &UsernameAndPassword) {
-    headers.set(
-       Authorization(
-           Basic {
-               username: credentials.username().clone(),
-               password: Some(credentials.password().clone())
-           }
-       )
-    );
-}
-
-fn add_accept_json_header(headers: &mut Headers) {
-    headers.set(
-        Accept(vec![
-            qitem(Mime(TopLevel::Application, SubLevel::Json,
-                       vec![(Attr::Charset, Value::Utf8)])),
-        ])
-    );
-}
-
-fn add_content_type_xml_header(headers: &mut Headers) {
-    headers.set(
-        ContentType(Mime(TopLevel::Application, SubLevel::Xml,
-                         vec![(Attr::Charset, Value::Utf8)]))
-    );
-}
-
-fn add_content_type_json_header(headers: &mut Headers) {
-    headers.set(
-        ContentType(Mime(TopLevel::Application, SubLevel::Json,
-                         vec![(Attr::Charset, Value::Utf8)]))
-    );
-}
-
 fn get_build_list(config: &TeamcityCredentials, branch: &str)
         -> Result<teamcity::BuildList, String> {
 
     let mut headers = Headers::new();
-    add_authorization_header(&mut headers, config as &UsernameAndPassword);
-    add_accept_json_header(&mut headers);
+    rest::add_authorization_header(&mut headers, config as &UsernameAndPassword);
+    rest::add_accept_json_header(&mut headers);
     let client = Client::new();
 
     let encoded_branch = utf8_percent_encode(branch, QUERY_ENCODE_SET).collect::<String>();
@@ -299,8 +266,8 @@ fn get_build_list(config: &TeamcityCredentials, branch: &str)
 
 fn get_build(config: &TeamcityCredentials, build_id: i32) -> Result<teamcity::Build, String> {
         let mut headers = Headers::new();
-        add_authorization_header(&mut headers, config as &UsernameAndPassword);
-        add_accept_json_header(&mut headers);
+        rest::add_authorization_header(&mut headers, config as &UsernameAndPassword);
+        rest::add_accept_json_header(&mut headers);
         let client = Client::new();
 
         let url = format!("{}/builds/id:{}", config.base_url, build_id);
@@ -330,9 +297,9 @@ fn get_build(config: &TeamcityCredentials, build_id: i32) -> Result<teamcity::Bu
 fn queue_build(config: &TeamcityCredentials, branch: &str)
     -> Result<teamcity::Build, String> {
     let mut headers = Headers::new();
-    add_authorization_header(&mut headers, config as &UsernameAndPassword);
-    add_accept_json_header(&mut headers);
-    add_content_type_xml_header(&mut headers);
+    rest::add_authorization_header(&mut headers, config as &UsernameAndPassword);
+    rest::add_accept_json_header(&mut headers);
+    rest::add_content_type_xml_header(&mut headers);
 
     let client = Client::new();
     // FIXME: Format a proper template instead!

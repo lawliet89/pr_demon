@@ -2,10 +2,12 @@ use std::collections::BTreeMap;
 use std::vec::Vec;
 use std::option::Option;
 
+use ::rest;
 use hyper;
 use std::io::Read;
 use rustc_serialize::json;
 use hyper::client::Client;
+use hyper::header::Headers;
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
@@ -141,7 +143,7 @@ impl ::UsernameAndPassword for BitbucketCredentials {
 impl ::Repository for BitbucketCredentials {
     fn get_pr_list(&self) -> Result<Vec<::PullRequest>, String> {
         let mut headers = Headers::new();
-        ::add_authorization_header(&mut headers, self as &::UsernameAndPassword);
+        rest::add_authorization_header(&mut headers, self as &::UsernameAndPassword);
         let client = Client::new();
         let url = format!("{}/projects/{}/repos/{}/pull-requests",
             self.base_url, self.project_slug, self.repo_slug);
@@ -177,7 +179,7 @@ impl ::Repository for BitbucketCredentials {
 
     fn get_comments(&self, pr_id: i32) -> Result<Vec<::Comment>, String> {
         let mut headers = Headers::new();
-        ::add_authorization_header(&mut headers, self as &::UsernameAndPassword);
+        rest::add_authorization_header(&mut headers, self as &::UsernameAndPassword);
 
         let client = Client::new();
         let url = format!("{}/projects/{}/repos/{}/pull-requests/{}/activities?fromType=COMMENT",
@@ -232,9 +234,9 @@ impl ::Repository for BitbucketCredentials {
         };
 
         let mut headers = Headers::new();
-        ::add_authorization_header(&mut headers, self as &::UsernameAndPassword);
-        ::add_accept_json_header(&mut headers);
-        ::add_content_type_json_header(&mut headers);
+        rest::add_authorization_header(&mut headers, self as &::UsernameAndPassword);
+        rest::add_accept_json_header(&mut headers);
+        rest::add_content_type_json_header(&mut headers);
 
         let client = Client::new();
         let body = json::encode(&CommentSubmit {
