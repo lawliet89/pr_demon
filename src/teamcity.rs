@@ -37,12 +37,32 @@ pub enum BuildState {
     running
 }
 
+impl BuildState {
+    fn to_build_state(self) -> ::BuildState {
+        match self {
+            BuildState::queued => ::BuildState::Queued,
+            BuildState::finished => ::BuildState::Finished,
+            BuildState::running => ::BuildState::Running
+        }
+    }
+}
+
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub enum BuildStatus {
     SUCCESS,
     FAILURE,
     UNKNOWN
+}
+
+impl BuildStatus {
+    fn to_build_status(self) -> ::BuildStatus {
+        match self {
+            BuildStatus::SUCCESS => ::BuildStatus::Success,
+            BuildStatus::FAILURE => ::BuildStatus::Failure,
+            BuildStatus::UNKNOWN => ::BuildStatus::Unknown
+        }
+    }
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
@@ -217,6 +237,56 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
                                 }
                             }).collect()
                         }
+                    }
+                )
+            },
+            Err(err) =>  Err(format!("Error parsing response: {} {}", json_string, err))
+        }
+    }
+
+    fn get_build(&self, build_id: i32) -> Result<::BuildDetails, String> {
+        let mut headers = Headers::new();
+        rest::add_authorization_header(&mut headers, self as &::UsernameAndPassword);
+        rest::add_accept_json_header(&mut headers);
+
+        let client = Client::new();
+        let url = format!("{}/builds/id:{}", self.base_url, build_id);
+        let mut response = match client
+                .get(&url)
+                .headers(headers).send() {
+            Ok(x) => x,
+            Err(err) => return Err(format!("Unable to retrieve build: {}", err))
+        };
+
+        match response.status {
+            hyper::status::StatusCode::Ok => (),
+            e @ _ => return Err(e.to_string())
+        };
+
+        let mut json_string = String::new();
+        if let Err(err) = response.read_to_string(&mut json_string) {
+            return Err(format!("Unable to retrieve build: {}", err))
+        }
+
+        match json::decode::<Build>(&json_string) {
+            Ok(build) => {
+                let commit = match build.revisions.revision {
+                    None => None,
+                    // Should not panic because None would have caught a non-existent vector
+                    Some(revisions) => Some(revisions.first().unwrap().version.to_owned())
+                };
+                let status = match build.status {
+                    None => ::BuildStatus::Unknown,
+                    Some(status) => status.to_build_status()
+                };
+                Ok(
+                    ::BuildDetails {
+                        id: build.id,
+                        web_url: build.webUrl,
+                        commit: commit,
+                        state: build.state.to_build_state(),
+                        status: status,
+                        status_text: build.statusText
                     }
                 )
             },
