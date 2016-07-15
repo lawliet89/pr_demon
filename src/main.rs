@@ -18,7 +18,7 @@ use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 struct Config {
     teamcity: TeamcityCredentials,
-    bitbucket: BitbucketCredentials
+    bitbucket: bitbucket::BitbucketCredentials
 }
 
 trait UsernameAndPassword {
@@ -26,24 +26,6 @@ trait UsernameAndPassword {
     fn password(&self) -> &String;
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
-struct BitbucketCredentials {
-    username: String,
-    password: String,
-    base_url: String,
-    project_slug: String,
-    repo_slug: String
-}
-
-impl UsernameAndPassword for BitbucketCredentials {
-    fn username(&self) -> &String {
-        &self.username
-    }
-
-    fn password(&self) -> &String {
-        &self.password
-    }
-}
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 struct TeamcityCredentials {
@@ -63,6 +45,19 @@ impl UsernameAndPassword for TeamcityCredentials {
     }
 }
 
+pub struct PullRequest {
+    pub id: i32,
+    pub web_url: String,
+    pub from_ref: String,
+    pub from_commit: String
+}
+
+pub trait Repository {
+    fn get_pr_list(&self) -> Result<Vec<PullRequest>, String>;
+    // fn get_comments();
+    // fn post_comment();
+}
+
 fn main() {
     let config_path = match env::args().nth(1) {
         Some(x) => x,
@@ -76,7 +71,7 @@ fn main() {
     let sleep_duration = std::time::Duration::new(5, 0);
 
     loop {
-        let pull_requests = match get_pr(&config.bitbucket) {
+        let pull_requests = match config.bitbucket.get_pr_list() {
             Err(err) => {
                 println!("Error getting Pull Requests: {}", err);
                 continue;
@@ -84,13 +79,13 @@ fn main() {
             Ok(x) => x
         };
 
-        println!("{} Open Pull Requests Found", pull_requests.size);
+        println!("{} Open Pull Requests Found", pull_requests.len());
 
-        for pr in &pull_requests.values {
-            println!("{}Pull Request #{} ({})", tabs(1), pr.id, pr.links["self"][0].href);
-            let git_ref = &pr.fromRef.id;
+        for pr in &pull_requests {
+            println!("{}Pull Request #{} ({})", tabs(1), pr.id, pr.web_url);
+            let git_ref = &pr.from_ref;
             let branch_name: String = git_ref.split('/').skip(2).collect::<Vec<_>>().join("/");
-            let pr_commit = &pr.fromRef.latestCommit;
+            let pr_commit = &pr.from_commit;
             println!("{}Branch: {}", tabs(2), branch_name);
             println!("{}Commit: {}", tabs(2), pr_commit);
             println!("{}Finding latest build from branch", tabs(2));
@@ -258,30 +253,6 @@ fn add_content_type_json_header(headers: &mut Headers) {
     );
 }
 
-fn get_pr(config: &BitbucketCredentials)
-    -> Result<bitbucket::PagedApi<bitbucket::PullRequest>, String> {
-
-    let mut headers = Headers::new();
-    add_authorization_header(&mut headers, config as &UsernameAndPassword);
-    let client = Client::new();
-    let url = format!("{}/projects/{}/repos/{}/pull-requests",
-        config.base_url, config.project_slug, config.repo_slug);
-    let mut response = match client.get(&url).headers(headers).send() {
-        Ok(x) => x,
-        Err(err) => return Err(format!("Unable to get list of PR: {}", err))
-    };
-
-    let mut json_string = String::new();
-    if let Err(err) = response.read_to_string(&mut json_string) {
-        return Err(format!("Unable to get a list of PR: {}", err))
-    }
-
-    match json::decode(&json_string) {
-        Ok(x) => Ok(x),
-        Err(err) =>  Err(format!("Error parsing response: {}", err))
-    }
-}
-
 fn get_build_list(config: &TeamcityCredentials, branch: &str)
         -> Result<teamcity::BuildList, String> {
 
@@ -384,7 +355,7 @@ fn queue_build(config: &TeamcityCredentials, branch: &str)
     }
 }
 
-fn get_comment(pr_id: i32, config: &BitbucketCredentials)
+fn get_comment(pr_id: i32, config: &bitbucket::BitbucketCredentials)
         -> Result<bitbucket::PagedApi<bitbucket::Activity>, String> {
     let mut headers = Headers::new();
     add_authorization_header(&mut headers, config as &UsernameAndPassword);
@@ -416,7 +387,7 @@ fn get_comment(pr_id: i32, config: &BitbucketCredentials)
     }
 }
 
-fn post_comment(comment: &str, pr_id: i32, config: &BitbucketCredentials)
+fn post_comment(comment: &str, pr_id: i32, config: &bitbucket::BitbucketCredentials)
         -> Result<bitbucket::Comment, String> {
     match get_comment(pr_id, &config) {
         Ok(ref activities) => {
@@ -470,19 +441,19 @@ fn post_comment(comment: &str, pr_id: i32, config: &BitbucketCredentials)
     }
 }
 
-fn post_queued_comment(build_url: &str, commit_id: &str, pr_id: i32, config: &BitbucketCredentials)
+fn post_queued_comment(build_url: &str, commit_id: &str, pr_id: i32, config: &bitbucket::BitbucketCredentials)
         -> Result<bitbucket::Comment, String> {
     let comment = format!("⏳ [Build]({}) for commit {} queued", build_url, commit_id);
     post_comment(&comment, pr_id, config)
 }
 
-fn post_success_comment(build_url: &str, commit_id: &str, pr_id: i32, config: &BitbucketCredentials)
+fn post_success_comment(build_url: &str, commit_id: &str, pr_id: i32, config: &bitbucket::BitbucketCredentials)
         -> Result<bitbucket::Comment, String> {
     let comment = format!("✔️ [Build]({}) for commit {} is **successful**", build_url, commit_id);
     post_comment(&comment, pr_id, config)
 }
 
-fn post_failure_comment(build_url: &str, commit_id: &str, build_message: &str, pr_id: i32, config: &BitbucketCredentials)
+fn post_failure_comment(build_url: &str, commit_id: &str, build_message: &str, pr_id: i32, config: &bitbucket::BitbucketCredentials)
         -> Result<bitbucket::Comment, String> {
     let comment = format!("❌ [Build]({}) for commit {} has **failed**: {}", build_url, commit_id, build_message);
     post_comment(&comment, pr_id, config)
@@ -490,12 +461,13 @@ fn post_failure_comment(build_url: &str, commit_id: &str, build_message: &str, p
 
 #[cfg(test)]
 mod tests {
-    use super::{Config, TeamcityCredentials, BitbucketCredentials, read_config};
+    use super::bitbucket;
+    use super::{Config, TeamcityCredentials, read_config};
 
     #[test]
     fn it_reads_and_parses_a_config_file() {
         let expected = Config {
-            bitbucket: BitbucketCredentials {
+            bitbucket: bitbucket::BitbucketCredentials {
                 username: "username".to_owned(),
                 password: "password".to_owned(),
                 base_url: "https://www.example.com/bb/rest/api/latest".to_owned(),

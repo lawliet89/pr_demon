@@ -2,6 +2,15 @@ use std::collections::BTreeMap;
 use std::vec::Vec;
 use std::option::Option;
 
+use std::env;
+use std::fs::File;
+use std::io::Read;
+use std::iter;
+use rustc_serialize::json;
+use hyper::client::Client;
+use hyper::header::{Headers, Authorization, Basic, Accept, qitem, ContentType};
+use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
+
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
 pub struct PagedApi<T> {
@@ -112,4 +121,56 @@ pub struct Activity {
     pub action: String,
     pub commentAction: Option<String>,
     pub comment: Option<Comment>
+}
+
+#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+pub struct BitbucketCredentials {
+    pub username: String,
+    pub password: String,
+    pub base_url: String,
+    pub project_slug: String,
+    pub repo_slug: String
+}
+
+impl ::UsernameAndPassword for BitbucketCredentials {
+    fn username(&self) -> &String {
+        &self.username
+    }
+
+    fn password(&self) -> &String {
+        &self.password
+    }
+}
+
+impl ::Repository for BitbucketCredentials {
+    fn get_pr_list(&self) -> Result<Vec<::PullRequest>, String> {
+        let mut headers = Headers::new();
+        ::add_authorization_header(&mut headers, self as &::UsernameAndPassword);
+        let client = Client::new();
+        let url = format!("{}/projects/{}/repos/{}/pull-requests",
+            self.base_url, self.project_slug, self.repo_slug);
+        let mut response = match client.get(&url).headers(headers).send() {
+            Ok(x) => x,
+            Err(err) => return Err(format!("Unable to get list of PR: {}", err))
+        };
+
+        let mut json_string = String::new();
+        if let Err(err) = response.read_to_string(&mut json_string) {
+            return Err(format!("Unable to get a list of PR: {}", err))
+        }
+
+        match json::decode::<PagedApi<PullRequest>>(&json_string) {
+            Ok(ref prs) => {
+                Ok(prs.values.iter().map( |ref pr| {
+                    ::PullRequest {
+                        id: pr.id,
+                        web_url: pr.links["self"][0].href.to_owned(),
+                        from_ref: pr.fromRef.id.to_owned(),
+                        from_commit: pr.fromRef.latestCommit.to_owned()
+                    }
+                }).collect())
+            },
+            Err(err) =>  Err(format!("Error parsing response: {}", err))
+        }
+    }
 }
