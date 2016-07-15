@@ -102,3 +102,14 @@ pub struct Link {
     pub href: String,
     pub name: Option<String>
 }
+
+#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[allow(non_snake_case)]
+pub struct Activity {
+    pub id: i32,
+    pub createdDate: i64,
+    pub user: User,
+    pub action: String,
+    pub commentAction: Option<String>,
+    pub comment: Option<Comment>
+}

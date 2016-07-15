@@ -2,7 +2,16 @@
 #[allow(non_camel_case_types)]
 pub enum BuildState {
     queued,
-    finished
+    finished,
+    running
+}
+
+#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[allow(non_camel_case_types)]
+pub enum BuildStatus {
+    SUCCESS,
+    FAILURE,
+    UNKNOWN
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
@@ -10,8 +19,9 @@ pub enum BuildState {
 pub struct Build {
     pub id: i32,
     pub buildTypeId: String,
-    pub status: Option<String>,
-    pub state: BuildState, // queued, finished,
+    pub status: Option<BuildStatus>,
+    pub state: BuildState,
+    pub failedToStart: Option<bool>,
     pub branchName: String,
     pub defaultBranch: Option<bool>,
     pub href: String,

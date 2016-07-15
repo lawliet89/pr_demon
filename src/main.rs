@@ -89,13 +89,14 @@ fn main() {
         for pr in &pull_requests.values {
             println!("{}Pull Request #{} ({})", tabs(1), pr.id, pr.links["self"][0].href);
             let git_ref = &pr.fromRef.id;
-            let branch_name = git_ref.split('/').next_back().unwrap();
+            // turn refs/heads/branchfoo/branchbar to branchfoo/branchbar
+            let branch_name: String = git_ref.split('/').skip(2).collect::<Vec<_>>().join("/");
             let pr_commit = &pr.fromRef.latestCommit;
             println!("{}Branch: {}", tabs(2), branch_name);
             println!("{}Commit: {}", tabs(2), pr_commit);
             println!("{}Finding latest build from branch", tabs(2));
 
-            let mut run_build = false;
+            let mut build_found: Option<teamcity::Build> = None;
             let builds = get_builds(&config.teamcity, &branch_name);
 
             match builds {
@@ -105,50 +106,67 @@ fn main() {
                             if let Some(y) = x.first() {
                                 if &y.version == pr_commit {
                                     println!("{}Commit matches -- skipping", tabs(2));
+                                    build_found = Some(build.to_owned());
                                 } else {
-                                    println!("{}Commit does not match -- scheduling build", tabs(2));
-                                    run_build = true;
+                                    println!("{}Commit does not match with {} -- scheduling build", tabs(2), y.version);
                                 }
                             }
                         },
                         None if build.state == teamcity::BuildState::queued => {
                             println!("{}Build is queued -- skipping", tabs(2));
+                            build_found = Some(build.to_owned());
                         },
                         _ => {
                             println!("{}Unknown error -- scheduling build", tabs(2));
-                            run_build = true;
                         }
                     };
                 },
                 Err(ref err) if err == "404 Not Found" => {
                     println!("{}Build does not exist -- running build", tabs(2));
-                    run_build = true;
                 },
                 Err(e @ _) => {
-                    println!("{} Error fetching builds -- queuing anyway: {}", tabs(2), e);
-                    run_build = true;
+                    println!("{}Error fetching builds -- queuing anyway: {}", tabs(2), e);
                 }
             };
 
-            if run_build {
-                println!("{}Scheduling build", tabs(2));
-                let queued_build = queue_build(&config.teamcity, &branch_name);
-                match queued_build {
-                    Err(err) => {
-                        println!("{}Error queuing build: {}", tabs(2), err);
-                        continue;
-                    },
-                    Ok(queued) => {
-                        println!("{}Build Queued: {}", tabs(2), queued.webUrl);
-                        match post_queued_comment(&queued.webUrl, pr_commit, pr.id, &config.bitbucket) {
-                            Ok(x) => {},
-                            Err(err) => println!("{}Error submitting comment: {}", tabs(2), err)
-                        };
+            match build_found {
+                None => {
+                    println!("{}Scheduling build", tabs(2));
+                    // let queued_build = queue_build(&config.teamcity, &branch_name);
+                    // match queued_build {
+                    //     Err(err) => {
+                    //         println!("{}Error queuing build: {}", tabs(2), err);
+                    //         continue;
+                    //     },
+                    //     Ok(queued) => {
+                    //         println!("{}Build Queued: {}", tabs(2), queued.webUrl);
+                    //         // match post_queued_comment(&queued.webUrl, pr_commit, pr.id, &config.bitbucket) {
+                    //         //     Ok(_) => {},
+                    //         //     Err(err) => println!("{}Error submitting comment: {}", tabs(2), err)
+                    //         // };
+                    //     }
+                    // }
+                },
+                Some(build) => {
+                    println!("{}Build exists: {}", tabs(2), build.webUrl);
+                    match build.status {
+                        None => {},
+                        Some(status) => {
+                            match status {
+                                teamcity::BuildStatus::SUCCESS => {
+                                    match post_success_comment(&build.webUrl, pr_commit, pr.id, &config.bitbucket) {
+                                        Ok(_) => {},
+                                        Err(err) => println!("{}Error submitting comment: {}", tabs(2), err)
+                                    };
+                                },
+                                teamcity::BuildStatus::FAILURE | teamcity::BuildStatus::UNKNOWN => {
+
+                                }
+                            };
+                        }
                     }
                 }
-            } else {
-                println!("{}Build exists", tabs(2));
-            }
+            };
         }
         std::thread::sleep(sleep_duration);
     }
@@ -301,8 +319,56 @@ fn queue_build(config: &TeamcityCredentials, branch: &str)
     }
 }
 
+fn get_comment(pr_id: i32, config: &BitbucketCredentials)
+        -> Result<bitbucket::PagedApi<bitbucket::Activity>, String> {
+    let mut headers = Headers::new();
+    add_authorization_header(&mut headers, config as &UsernameAndPassword);
+    add_accept_json_header(&mut headers);
+
+    let client = Client::new();
+    let url = format!("{}/projects/{}/repos/{}/pull-requests/{}/activities?fromType=COMMENT",
+            config.base_url, config.project_slug, config.repo_slug, pr_id);
+    let mut response = match client
+            .get(&url)
+            .headers(headers).send() {
+        Ok(x) => x,
+        Err(err) => return Err(format!("Unable to retrieve comments: {}", err))
+    };
+
+    match response.status {
+        hyper::status::StatusCode::Ok => (),
+        e @ _ => return Err(e.to_string())
+    };
+
+    let mut json_string = String::new();
+    if let Err(err) = response.read_to_string(&mut json_string) {
+        return Err(format!("Unable to retrieve comments: {}", err))
+    }
+
+    match json::decode(&json_string) {
+        Ok(x) => Ok(x),
+        Err(err) =>  Err(format!("Error parsing response: {} {}", json_string, err))
+    }
+}
+
 fn post_comment(comment: &str, pr_id: i32, config: &BitbucketCredentials)
         -> Result<bitbucket::Comment, String> {
+    match get_comment(pr_id, &config) {
+        Ok(ref activities) => {
+            let activity = activities.values.iter()
+                .filter(|&activity| activity.comment.is_some())
+                .find(|&activity| activity.comment.as_ref().unwrap().text == comment);
+
+            match activity {
+                None => {},
+                Some(matching_activity) => {
+                    return Ok(matching_activity.clone().comment.unwrap().to_owned())
+                }
+            };
+        },
+        Err(err) => { println!("Error getting list of comments {}", err); }
+    };
+
     let mut headers = Headers::new();
     add_authorization_header(&mut headers, config as &UsernameAndPassword);
     add_accept_json_header(&mut headers);
@@ -324,7 +390,7 @@ fn post_comment(comment: &str, pr_id: i32, config: &BitbucketCredentials)
     };
 
     match response.status {
-        hyper::status::StatusCode::Ok => (),
+        hyper::status::StatusCode::Created => (),
         e @ _ => return Err(e.to_string())
     };
 
@@ -342,6 +408,18 @@ fn post_comment(comment: &str, pr_id: i32, config: &BitbucketCredentials)
 fn post_queued_comment(build_url: &str, commit_id: &str, pr_id: i32, config: &BitbucketCredentials)
         -> Result<bitbucket::Comment, String> {
     let comment = format!("⏳ [Build]({}) for commit {} queued", build_url, commit_id);
+    post_comment(&comment, pr_id, config)
+}
+
+fn post_success_comment(build_url: &str, commit_id: &str, pr_id: i32, config: &BitbucketCredentials)
+        -> Result<bitbucket::Comment, String> {
+    let comment = format!("✔️ [Build]({}) for commit {} is **successful**", build_url, commit_id);
+    post_comment(&comment, pr_id, config)
+}
+
+fn post_failure_comment(build_url: &str, commit_id: &str, build_message: &str, pr_id: i32, config: &BitbucketCredentials)
+        -> Result<bitbucket::Comment, String> {
+    let comment = format!("✔️ [Build]({}) for commit {} has **failed**: {}", build_url, commit_id, build_message);
     post_comment(&comment, pr_id, config)
 }
 
