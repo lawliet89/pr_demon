@@ -15,6 +15,29 @@ pub enum BuildStatus {
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+pub struct BuildList {
+    pub count: i32,
+    pub href: String,
+    pub build: Option<Vec<BuildListItem>>
+}
+
+#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[allow(non_snake_case)]
+pub struct BuildListItem {
+    pub id: i32,
+    pub buildTypeId: String,
+    pub number: i32,
+    pub status: Option<BuildStatus>,
+    pub state: BuildState,
+    pub running: Option<bool>,
+    pub percentageComplete: Option<i32>,
+    pub branchName: String,
+    pub defaultBranch: Option<bool>,
+    pub href: String,
+    pub webUrl: String
+}
+
+#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
 pub struct Build {
     pub id: i32,

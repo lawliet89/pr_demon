@@ -2,15 +2,14 @@
   "teamcity": {
     "username": "username",
     "password": "password",
-    "build_id": "foobar",
-    "endpoints": {
-      "builds.list": "http://www.foobar.com/rest",
-      "build.queue": "http://www.foobar.com/rest/queue"
-    }
+    "base_url": "https://www.foobar.com/rest",
+    "build_id": "foobar"
   },
   "bitbucket": {
     "username": "username",
     "password": "password",
-    "endpoint": "http://www.foobar.com/rest"
+    "base_url": "https://www.example.com/bb/rest/api/latest",
+    "project_slug": "foo",
+    "repo_slug": "bar"
   }
 }

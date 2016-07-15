@@ -7,3 +7,4 @@ authors = ["Yong Wen Chua <ida@yongwen.xyz>"]
 hyper = "*"
 rustc-serialize = "*"
 time = "*"
+url = "*"

@@ -1,5 +1,6 @@
 extern crate hyper;
 extern crate rustc_serialize;
+extern crate url;
 
 mod bitbucket;
 mod teamcity;
@@ -8,12 +9,11 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::iter;
-use std::collections::BTreeMap;
 use rustc_serialize::json;
 use hyper::client::Client;
 use hyper::header::{Headers, Authorization, Basic, Accept, qitem, ContentType};
 use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
-
+use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 struct Config {
@@ -49,7 +49,7 @@ impl UsernameAndPassword for BitbucketCredentials {
 struct TeamcityCredentials {
     username: String,
     password: String,
-    endpoints: BTreeMap<String, String>,
+    base_url: String,
     build_id: String
 }
 
@@ -89,63 +89,86 @@ fn main() {
         for pr in &pull_requests.values {
             println!("{}Pull Request #{} ({})", tabs(1), pr.id, pr.links["self"][0].href);
             let git_ref = &pr.fromRef.id;
-            // turn refs/heads/branchfoo/branchbar to branchfoo/branchbar
             let branch_name: String = git_ref.split('/').skip(2).collect::<Vec<_>>().join("/");
             let pr_commit = &pr.fromRef.latestCommit;
             println!("{}Branch: {}", tabs(2), branch_name);
             println!("{}Commit: {}", tabs(2), pr_commit);
             println!("{}Finding latest build from branch", tabs(2));
 
-            let mut build_found: Option<teamcity::Build> = None;
-            let builds = get_builds(&config.teamcity, &branch_name);
+            let latest_build = match get_build_list(&config.teamcity, &branch_name) {
+                Ok(ref build_list) => {
+                    match build_list.build {
+                        Some(ref builds) => {
+                            let latest_build_id = builds.first().unwrap().id;
+                            match get_build(&config.teamcity, latest_build_id) {
+                                Ok(x) =>  {
+                                    println!("{}Latest Build Found {}", tabs(2), x.webUrl);
+                                    Some(x)
+                                },
+                                Err(err) => {
+                                    println!("{}Unable to retrieve information for build ID {}: {}", tabs(2), latest_build_id, err);
+                                    None
+                                }
+                            }
+                        },
+                        None => {
+                            println!("{}Build does not exist -- running build", tabs(2));
+                            None
+                        }
+                    }
+                },
+                Err(err) => {
+                    println!("{}Error fetching builds -- queuing anyway: {}", tabs(2), err);
+                    None
+                }
+            };
 
-            match builds {
-                Ok(ref build) => {
+            let build_found = match latest_build {
+                None => None,
+                Some(ref build) => {
                     match build.revisions.revision.as_ref() {
                         Some(ref x) => {
                             if let Some(y) = x.first() {
                                 if &y.version == pr_commit {
                                     println!("{}Commit matches -- skipping", tabs(2));
-                                    build_found = Some(build.to_owned());
+                                    Some(build.to_owned())
                                 } else {
                                     println!("{}Commit does not match with {} -- scheduling build", tabs(2), y.version);
+                                    None
                                 }
+                            } else {
+                                None
                             }
                         },
                         None if build.state == teamcity::BuildState::queued => {
                             println!("{}Build is queued -- skipping", tabs(2));
-                            build_found = Some(build.to_owned());
+                            Some(build.to_owned())
                         },
                         _ => {
                             println!("{}Unknown error -- scheduling build", tabs(2));
+                            None
                         }
-                    };
-                },
-                Err(ref err) if err == "404 Not Found" => {
-                    println!("{}Build does not exist -- running build", tabs(2));
-                },
-                Err(e @ _) => {
-                    println!("{}Error fetching builds -- queuing anyway: {}", tabs(2), e);
+                    }
                 }
             };
 
             match build_found {
                 None => {
                     println!("{}Scheduling build", tabs(2));
-                    // let queued_build = queue_build(&config.teamcity, &branch_name);
-                    // match queued_build {
-                    //     Err(err) => {
-                    //         println!("{}Error queuing build: {}", tabs(2), err);
-                    //         continue;
-                    //     },
-                    //     Ok(queued) => {
-                    //         println!("{}Build Queued: {}", tabs(2), queued.webUrl);
-                    //         // match post_queued_comment(&queued.webUrl, pr_commit, pr.id, &config.bitbucket) {
-                    //         //     Ok(_) => {},
-                    //         //     Err(err) => println!("{}Error submitting comment: {}", tabs(2), err)
-                    //         // };
-                    //     }
-                    // }
+                    let queued_build = queue_build(&config.teamcity, &branch_name);
+                    match queued_build {
+                        Err(err) => {
+                            println!("{}Error queuing build: {}", tabs(2), err);
+                            continue;
+                        },
+                        Ok(queued) => {
+                            println!("{}Build Queued: {}", tabs(2), queued.webUrl);
+                            match post_queued_comment(&queued.webUrl, pr_commit, pr.id, &config.bitbucket) {
+                                Ok(_) => {},
+                                Err(err) => println!("{}Error submitting comment: {}", tabs(2), err)
+                            };
+                        }
+                    }
                 },
                 Some(build) => {
                     println!("{}Build exists: {}", tabs(2), build.webUrl);
@@ -160,7 +183,14 @@ fn main() {
                                     };
                                 },
                                 teamcity::BuildStatus::FAILURE | teamcity::BuildStatus::UNKNOWN => {
-
+                                    let status_text = match build.statusText {
+                                        None => "".to_owned(),
+                                        Some(x) => x.to_owned()
+                                    };
+                                    match post_failure_comment(&build.webUrl, pr_commit, &status_text, pr.id, &config.bitbucket) {
+                                        Ok(_) => {},
+                                        Err(err) => println!("{}Error submitting comment: {}", tabs(2), err)
+                                    };
                                 }
                             };
                         }
@@ -252,15 +282,19 @@ fn get_pr(config: &BitbucketCredentials)
     }
 }
 
-fn get_builds(config: &TeamcityCredentials, branch: &str)
-    -> Result<teamcity::Build, String> {
+fn get_build_list(config: &TeamcityCredentials, branch: &str)
+        -> Result<teamcity::BuildList, String> {
+
     let mut headers = Headers::new();
     add_authorization_header(&mut headers, config as &UsernameAndPassword);
     add_accept_json_header(&mut headers);
     let client = Client::new();
-    // FIXME: Format a proper URL instead
+
+    let encoded_branch = utf8_percent_encode(branch, QUERY_ENCODE_SET).collect::<String>();
+    let query_string = format!("state:any,branch:(name:{})", encoded_branch);
+    let url = format!("{}/buildTypes/id:{}/builds?locator={}", config.base_url, config.build_id, query_string);
     let mut response = match client
-            .get(&(format!("{}{}", config.endpoints["builds.list"], branch)))
+            .get(&url)
             .headers(headers).send() {
         Ok(x) => x,
         Err(err) => return Err(format!("Unable to get list of Builds: {}", err))
@@ -282,6 +316,36 @@ fn get_builds(config: &TeamcityCredentials, branch: &str)
     }
 }
 
+fn get_build(config: &TeamcityCredentials, build_id: i32) -> Result<teamcity::Build, String> {
+        let mut headers = Headers::new();
+        add_authorization_header(&mut headers, config as &UsernameAndPassword);
+        add_accept_json_header(&mut headers);
+        let client = Client::new();
+
+        let url = format!("{}/builds/id:{}", config.base_url, build_id);
+        let mut response = match client
+                .get(&url)
+                .headers(headers).send() {
+            Ok(x) => x,
+            Err(err) => return Err(format!("Unable to retrieve build: {}", err))
+        };
+
+        match response.status {
+            hyper::status::StatusCode::Ok => (),
+            e @ _ => return Err(e.to_string())
+        };
+
+        let mut json_string = String::new();
+        if let Err(err) = response.read_to_string(&mut json_string) {
+            return Err(format!("Unable to retrieve build: {}", err))
+        }
+
+        match json::decode(&json_string) {
+            Ok(x) => Ok(x),
+            Err(err) =>  Err(format!("Error parsing response: {} {}", json_string, err))
+        }
+}
+
 fn queue_build(config: &TeamcityCredentials, branch: &str)
     -> Result<teamcity::Build, String> {
     let mut headers = Headers::new();
@@ -295,8 +359,9 @@ fn queue_build(config: &TeamcityCredentials, branch: &str)
                       <buildType id=\"{}\"/>
                       <comment><text>Triggered by PR Demon</text></comment>
                     </build>", branch, config.build_id);
+    let url = format!("{}/buildQueue", config.base_url);
     let mut response = match client
-            .post(&config.endpoints["build.queue"])
+            .post(&url)
             .body(&body)
             .headers(headers).send() {
         Ok(x) => x,
@@ -419,34 +484,29 @@ fn post_success_comment(build_url: &str, commit_id: &str, pr_id: i32, config: &B
 
 fn post_failure_comment(build_url: &str, commit_id: &str, build_message: &str, pr_id: i32, config: &BitbucketCredentials)
         -> Result<bitbucket::Comment, String> {
-    let comment = format!("✔️ [Build]({}) for commit {} has **failed**: {}", build_url, commit_id, build_message);
+    let comment = format!("❌ [Build]({}) for commit {} has **failed**: {}", build_url, commit_id, build_message);
     post_comment(&comment, pr_id, config)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
     use super::{Config, TeamcityCredentials, BitbucketCredentials, read_config};
 
     #[test]
     fn it_reads_and_parses_a_config_file() {
-        let mut expected_teamcity_endpoints = BTreeMap::<String, String>::new();
-        expected_teamcity_endpoints.insert("builds.list".to_owned(),
-                    "http://www.foobar.com/rest".to_owned());
-        expected_teamcity_endpoints.insert("build.queue".to_owned(),
-                    "http://www.foobar.com/rest/queue".to_owned());
-
         let expected = Config {
             bitbucket: BitbucketCredentials {
                 username: "username".to_owned(),
                 password: "password".to_owned(),
-                endpoint: "http://www.foobar.com/rest".to_owned()
+                base_url: "https://www.example.com/bb/rest/api/latest".to_owned(),
+                project_slug: "foo".to_owned(),
+                repo_slug: "bar".to_owned()
             },
             teamcity: TeamcityCredentials {
                 username: "username".to_owned(),
                 password: "password".to_owned(),
                 build_id: "foobar".to_owned(),
-                endpoints: expected_teamcity_endpoints.to_owned()
+                base_url: "https://www.foobar.com/rest".to_owned()
             }
         };
 
