@@ -15,7 +15,8 @@ use rustc_serialize::json;
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 struct Config { // TODO: Rename fields
     teamcity: teamcity::TeamcityCredentials,
-    bitbucket: bitbucket::BitbucketCredentials
+    bitbucket: bitbucket::BitbucketCredentials,
+    run_interval: u64
 }
 
 pub trait UsernameAndPassword {
@@ -88,7 +89,7 @@ fn main() {
         Err(err) => panic!(err)
     };
 
-    let sleep_duration = std::time::Duration::new(5, 0);
+    let sleep_duration = std::time::Duration::new(config.run_interval, 0);
 
     loop {
         let pull_requests = match config.bitbucket.get_pr_list() {
@@ -263,7 +264,8 @@ mod tests {
                 password: "password".to_owned(),
                 build_id: "foobar".to_owned(),
                 base_url: "https://www.foobar.com/rest".to_owned()
-            }
+            },
+            run_interval: 999
         };
 
         let actual = read_config("tests/fixtures/config.json").unwrap();

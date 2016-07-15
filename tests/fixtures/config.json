@@ -11,5 +11,6 @@
     "base_url": "https://www.example.com/bb/rest/api/latest",
     "project_slug": "foo",
     "repo_slug": "bar"
-  }
+  },
+  "run_interval": 999
 }
