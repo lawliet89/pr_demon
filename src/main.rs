@@ -190,7 +190,7 @@ fn main() {
                                 Err(err) => println!("{}Error submitting comment: {}", tabs(2), err)
                             };
                         },
-                        _ => {
+                        _ if build.state == BuildState::Finished => {
                             let status_text = match build.status_text {
                                 None => "".to_owned(),
                                 Some(x) => x.to_owned()
@@ -200,7 +200,8 @@ fn main() {
                                 Ok(_) => {},
                                 Err(err) => println!("{}Error submitting comment: {}", tabs(2), err)
                             };
-                        }
+                        },
+                        _ => {}
                     }
                 }
             };
