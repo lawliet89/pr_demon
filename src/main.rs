@@ -12,38 +12,18 @@ use std::io::Read;
 use std::iter;
 use rustc_serialize::json;
 use hyper::client::Client;
-use hyper::header::{Headers, Authorization, Basic, Accept, qitem, ContentType};
-use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
+use hyper::header::Headers;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 struct Config {
-    teamcity: TeamcityCredentials,
+    teamcity: teamcity::TeamcityCredentials,
     bitbucket: bitbucket::BitbucketCredentials
 }
 
 pub trait UsernameAndPassword {
     fn username(&self) -> &String;
     fn password(&self) -> &String;
-}
-
-
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
-struct TeamcityCredentials {
-    username: String,
-    password: String,
-    base_url: String,
-    build_id: String
-}
-
-impl UsernameAndPassword for TeamcityCredentials {
-    fn username(&self) -> &String {
-        &self.username
-    }
-
-    fn password(&self) -> &String {
-        &self.password
-    }
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
@@ -64,6 +44,17 @@ pub trait Repository {
     fn get_pr_list(&self) -> Result<Vec<PullRequest>, String>;
     fn get_comments(&self, pr_id: i32) -> Result<Vec<Comment>, String>;
     fn post_comment(&self, pr_id: i32, text: &str) -> Result<Comment, String>;
+}
+
+#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+pub struct Build {
+    pub id: i32
+}
+
+pub trait ContinuousIntegrator {
+    fn get_build_list(&self, branch: &str) -> Result<Vec<Build>, String>;
+    // fn get_build(build_id: i32);
+    // fn queue_build();
 }
 
 fn main() {
@@ -98,25 +89,22 @@ fn main() {
             println!("{}Commit: {}", tabs(2), pr_commit);
             println!("{}Finding latest build from branch", tabs(2));
 
-            let latest_build = match get_build_list(&config.teamcity, &branch_name) {
+            let latest_build = match config.teamcity.get_build_list(&branch_name) {
                 Ok(ref build_list) => {
-                    match build_list.build {
-                        Some(ref builds) => {
-                            let latest_build_id = builds.first().unwrap().id;
-                            match get_build(&config.teamcity, latest_build_id) {
-                                Ok(x) =>  {
-                                    println!("{}Latest Build Found {}", tabs(2), x.webUrl);
-                                    Some(x)
-                                },
-                                Err(err) => {
-                                    println!("{}Unable to retrieve information for build ID {}: {}", tabs(2), latest_build_id, err);
-                                    None
-                                }
+                    if build_list.is_empty() {
+                        println!("{}Build does not exist -- running build", tabs(2));
+                        None
+                    } else {
+                        let latest_build_id = build_list.first().unwrap().id;
+                        match get_build(&config.teamcity, latest_build_id) {
+                            Ok(x) =>  {
+                                println!("{}Latest Build Found {}", tabs(2), x.webUrl);
+                                Some(x)
+                            },
+                            Err(err) => {
+                                println!("{}Unable to retrieve information for build ID {}: {}", tabs(2), latest_build_id, err);
+                                None
                             }
-                        },
-                        None => {
-                            println!("{}Build does not exist -- running build", tabs(2));
-                            None
                         }
                     }
                 },
@@ -230,7 +218,7 @@ fn read_config(path: &str) -> Result<Config, String> {
     }
 }
 
-fn get_build_list(config: &TeamcityCredentials, branch: &str)
+fn get_build_list(config: &teamcity::TeamcityCredentials, branch: &str)
         -> Result<teamcity::BuildList, String> {
 
     let mut headers = Headers::new();
@@ -264,7 +252,7 @@ fn get_build_list(config: &TeamcityCredentials, branch: &str)
     }
 }
 
-fn get_build(config: &TeamcityCredentials, build_id: i32) -> Result<teamcity::Build, String> {
+fn get_build(config: &teamcity::TeamcityCredentials, build_id: i32) -> Result<teamcity::Build, String> {
         let mut headers = Headers::new();
         rest::add_authorization_header(&mut headers, config as &UsernameAndPassword);
         rest::add_accept_json_header(&mut headers);
@@ -294,7 +282,7 @@ fn get_build(config: &TeamcityCredentials, build_id: i32) -> Result<teamcity::Bu
         }
 }
 
-fn queue_build(config: &TeamcityCredentials, branch: &str)
+fn queue_build(config: &teamcity::TeamcityCredentials, branch: &str)
     -> Result<teamcity::Build, String> {
     let mut headers = Headers::new();
     rest::add_authorization_header(&mut headers, config as &UsernameAndPassword);
@@ -347,7 +335,8 @@ fn make_failure_comment(build_url: &str, commit_id: &str, build_message: &str) -
 #[cfg(test)]
 mod tests {
     use super::bitbucket;
-    use super::{Config, TeamcityCredentials, read_config};
+    use super::teamcity;
+    use super::{Config, read_config};
 
     #[test]
     fn it_reads_and_parses_a_config_file() {
@@ -359,7 +348,7 @@ mod tests {
                 project_slug: "foo".to_owned(),
                 repo_slug: "bar".to_owned()
             },
-            teamcity: TeamcityCredentials {
+            teamcity: teamcity::TeamcityCredentials {
                 username: "username".to_owned(),
                 password: "password".to_owned(),
                 build_id: "foobar".to_owned(),

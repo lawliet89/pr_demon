@@ -1,3 +1,34 @@
+use ::rest;
+use hyper;
+use std::env;
+use std::fs::File;
+use std::io::Read;
+use std::iter;
+use rustc_serialize::json;
+use hyper::client::Client;
+use hyper::header::{Headers, Authorization, Basic, Accept, qitem, ContentType};
+use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
+use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
+
+#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+pub struct TeamcityCredentials {
+    pub username: String,
+    pub password: String,
+    pub base_url: String,
+    pub build_id: String
+}
+
+impl ::UsernameAndPassword for TeamcityCredentials {
+    fn username(&self) -> &String {
+        &self.username
+    }
+
+    fn password(&self) -> &String {
+        &self.password
+    }
+}
+
+
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub enum BuildState {
@@ -26,7 +57,6 @@ pub struct BuildList {
 pub struct BuildListItem {
     pub id: i32,
     pub buildTypeId: String,
-    pub number: i32,
     pub status: Option<BuildStatus>,
     pub state: BuildState,
     pub running: Option<bool>,
@@ -147,4 +177,50 @@ pub struct Properties {
 pub struct Property {
     pub name: String,
     pub value: String
+}
+
+impl ::ContinuousIntegrator for TeamcityCredentials {
+    fn get_build_list(&self, branch: &str) -> Result<Vec<::Build>, String> {
+        let mut headers = Headers::new();
+        rest::add_authorization_header(&mut headers, self as &::UsernameAndPassword);
+        rest::add_accept_json_header(&mut headers);
+
+        let client = Client::new();
+        let encoded_branch = utf8_percent_encode(branch, QUERY_ENCODE_SET).collect::<String>();
+        let query_string = format!("state:any,branch:(name:{})", encoded_branch);
+        let url = format!("{}/buildTypes/id:{}/builds?locator={}",
+            self.base_url, self.build_id, query_string);
+        let mut response = match client.get(&url).headers(headers).send() {
+            Ok(x) => x,
+            Err(err) => return Err(format!("Unable to get list of Builds: {}", err))
+        };
+
+        match response.status {
+            hyper::status::StatusCode::Ok => (),
+            e @ _ => return Err(e.to_string())
+        };
+
+        let mut json_string = String::new();
+        if let Err(err) = response.read_to_string(&mut json_string) {
+            return Err(format!("Unable to get a list of Builds: {}", err))
+        }
+
+        match json::decode::<BuildList>(&json_string) {
+            Ok(build_list) => {
+                Ok(
+                    match build_list.build {
+                        None => vec![],
+                        Some(ref builds) => {
+                            builds.iter().map(|ref build| {
+                                ::Build {
+                                    id: build.id
+                                }
+                            }).collect()
+                        }
+                    }
+                )
+            },
+            Err(err) =>  Err(format!("Error parsing response: {} {}", json_string, err))
+        }
+    }
 }
