@@ -1,13 +1,9 @@
 use ::rest;
 use hyper;
-use std::env;
-use std::fs::File;
 use std::io::Read;
-use std::iter;
 use rustc_serialize::json;
 use hyper::client::Client;
-use hyper::header::{Headers, Authorization, Basic, Accept, qitem, ContentType};
-use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
+use hyper::header::Headers;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
@@ -27,7 +23,6 @@ impl ::UsernameAndPassword for TeamcityCredentials {
         &self.password
     }
 }
-
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_camel_case_types)]
@@ -113,15 +108,29 @@ pub struct Build {
     pub relatedIssues: Option<Href>,
     pub properties: Properties,
     pub statistics: Option<Href>
-    //
-    // "running-info": {
-    //   "percentageComplete": 96,
-    //   "elapsedSeconds": 851,
-    //   "estimatedTotalSeconds": 895,
-    //   "currentStageText": "Step 2/3: + bundle exec rubocop -r /usr/lib64/ruby/gems/2.2.0/gems/rubocop-junit-formatter-0.1.3/lib/rubocop/formatter/junit_formatter.rb --format RuboCop::Formatter::JUnitFormatter",
-    //   "outdated": false,
-    //   "probablyHanging": false
-    // },
+}
+
+impl Build {
+    fn to_build_details(&self) -> ::BuildDetails {
+        let commit = match self.revisions.revision {
+            None => None,
+            // Should not panic because None would have caught a non-existent vector
+            Some(ref revisions) => Some(revisions.first().unwrap().version.to_owned())
+        };
+        let status = match self.status {
+            None => ::BuildStatus::Unknown,
+            Some(ref status) => status.clone().to_build_status()
+        };
+        ::BuildDetails {
+            id: self.id,
+            web_url: self.webUrl.to_owned(),
+            commit: commit,
+            state: self.state.clone().to_build_state(),
+            status: status,
+            status_text: self.statusText.to_owned()
+        }
+    }
+
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
@@ -269,28 +278,45 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
         }
 
         match json::decode::<Build>(&json_string) {
-            Ok(build) => {
-                let commit = match build.revisions.revision {
-                    None => None,
-                    // Should not panic because None would have caught a non-existent vector
-                    Some(revisions) => Some(revisions.first().unwrap().version.to_owned())
-                };
-                let status = match build.status {
-                    None => ::BuildStatus::Unknown,
-                    Some(status) => status.to_build_status()
-                };
-                Ok(
-                    ::BuildDetails {
-                        id: build.id,
-                        web_url: build.webUrl,
-                        commit: commit,
-                        state: build.state.to_build_state(),
-                        status: status,
-                        status_text: build.statusText
-                    }
-                )
-            },
-            Err(err) =>  Err(format!("Error parsing response: {} {}", json_string, err))
+            Ok(build) => Ok(build.to_build_details()),
+            Err(err) => Err(format!("Error parsing response: {} {}", json_string, err))
+        }
+    }
+
+    fn queue_build(&self, branch: &str) -> Result<::BuildDetails, String> {
+        let mut headers = Headers::new();
+        rest::add_authorization_header(&mut headers, self as &::UsernameAndPassword);
+        rest::add_accept_json_header(&mut headers);
+        rest::add_content_type_xml_header(&mut headers);
+
+        let client = Client::new();
+        // FIXME: Format a proper template instead!
+        let body = format!("<build branchName=\"{}\">
+                          <buildType id=\"{}\"/>
+                          <comment><text>Triggered by PR Demon</text></comment>
+                        </build>", branch, self.build_id);
+        let url = format!("{}/buildQueue", self.base_url);
+        let mut response = match client
+                .post(&url)
+                .body(&body)
+                .headers(headers).send() {
+            Ok(response) => response,
+            Err(err) => return Err(format!("Unable to schedule build: {}", err))
+        };
+
+        match response.status {
+            hyper::status::StatusCode::Ok => (),
+            e @ _ => return Err(e.to_string())
+        };
+
+        let mut json_string = String::new();
+        if let Err(err) = response.read_to_string(&mut json_string) {
+            return Err(format!("Unable to schedule build: {}", err))
+        }
+
+        match json::decode::<Build>(&json_string) {
+            Ok(build) => Ok(build.to_build_details()),
+            Err(err) => Err(format!("Error parsing response: {} {}", json_string, err))
         }
     }
 }

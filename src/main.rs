@@ -11,9 +11,6 @@ use std::fs::File;
 use std::io::Read;
 use std::iter;
 use rustc_serialize::json;
-use hyper::client::Client;
-use hyper::header::Headers;
-use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 struct Config { // TODO: Rename fields
@@ -78,7 +75,7 @@ pub struct BuildDetails {
 pub trait ContinuousIntegrator {
     fn get_build_list(&self, branch: &str) -> Result<Vec<Build>, String>;
     fn get_build(&self, build_id: i32) -> Result<BuildDetails, String>;
-    // fn queue_build();
+    fn queue_build(&self, branch: &str) -> Result<BuildDetails, String>;
 }
 
 fn main() {
@@ -166,15 +163,15 @@ fn main() {
             match build_found {
                 None => {
                     println!("{}Scheduling build", tabs(2));
-                    let queued_build = queue_build(&config.teamcity, &branch_name);
+                    let queued_build = config.teamcity.queue_build(&branch_name);
                     match queued_build {
                         Err(err) => {
                             println!("{}Error queuing build: {}", tabs(2), err);
                             continue;
                         },
                         Ok(queued) => {
-                            println!("{}Build Queued: {}", tabs(2), queued.webUrl);
-                            let comment = make_queued_comment(&queued.webUrl, pr_commit);
+                            println!("{}Build Queued: {}", tabs(2), queued.web_url);
+                            let comment = make_queued_comment(&queued.web_url, pr_commit);
                             match config.bitbucket.post_comment(pr.id, &comment) {
                                 Ok(_) => {},
                                 Err(err) => println!("{}Error submitting comment: {}", tabs(2), err)
@@ -230,74 +227,6 @@ fn read_config(path: &str) -> Result<Config, String> {
     match json::decode(&json) {
         Ok(x) => Ok(x),
         Err(err) => return Err(format!("Unable to decode JSON value {}", err))
-    }
-}
-
-fn get_build(config: &teamcity::TeamcityCredentials, build_id: i32) -> Result<teamcity::Build, String> {
-        let mut headers = Headers::new();
-        rest::add_authorization_header(&mut headers, config as &UsernameAndPassword);
-        rest::add_accept_json_header(&mut headers);
-        let client = Client::new();
-
-        let url = format!("{}/builds/id:{}", config.base_url, build_id);
-        let mut response = match client
-                .get(&url)
-                .headers(headers).send() {
-            Ok(x) => x,
-            Err(err) => return Err(format!("Unable to retrieve build: {}", err))
-        };
-
-        match response.status {
-            hyper::status::StatusCode::Ok => (),
-            e @ _ => return Err(e.to_string())
-        };
-
-        let mut json_string = String::new();
-        if let Err(err) = response.read_to_string(&mut json_string) {
-            return Err(format!("Unable to retrieve build: {}", err))
-        }
-
-        match json::decode(&json_string) {
-            Ok(x) => Ok(x),
-            Err(err) =>  Err(format!("Error parsing response: {} {}", json_string, err))
-        }
-}
-
-fn queue_build(config: &teamcity::TeamcityCredentials, branch: &str)
-    -> Result<teamcity::Build, String> {
-    let mut headers = Headers::new();
-    rest::add_authorization_header(&mut headers, config as &UsernameAndPassword);
-    rest::add_accept_json_header(&mut headers);
-    rest::add_content_type_xml_header(&mut headers);
-
-    let client = Client::new();
-    // FIXME: Format a proper template instead!
-    let body = format!("<build branchName=\"{}\">
-                      <buildType id=\"{}\"/>
-                      <comment><text>Triggered by PR Demon</text></comment>
-                    </build>", branch, config.build_id);
-    let url = format!("{}/buildQueue", config.base_url);
-    let mut response = match client
-            .post(&url)
-            .body(&body)
-            .headers(headers).send() {
-        Ok(x) => x,
-        Err(err) => return Err(format!("Unable to schedule build: {}", err))
-    };
-
-    match response.status {
-        hyper::status::StatusCode::Ok => (),
-        e @ _ => return Err(e.to_string())
-    };
-
-    let mut json_string = String::new();
-    if let Err(err) = response.read_to_string(&mut json_string) {
-        return Err(format!("Unable to schedule build: {}", err))
-    }
-
-    match json::decode(&json_string) {
-        Ok(x) => Ok(x),
-        Err(err) =>  Err(format!("Error parsing response: {} {}", json_string, err))
     }
 }
 
