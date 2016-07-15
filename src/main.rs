@@ -45,6 +45,7 @@ impl UsernameAndPassword for TeamcityCredentials {
     }
 }
 
+#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct PullRequest {
     pub id: i32,
     pub web_url: String,
@@ -52,10 +53,16 @@ pub struct PullRequest {
     pub from_commit: String
 }
 
+#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+pub struct Comment {
+    pub id: i32,
+    pub text: String
+}
+
 pub trait Repository {
     fn get_pr_list(&self) -> Result<Vec<PullRequest>, String>;
-    // fn get_comments();
-    // fn post_comment();
+    fn get_comments(&self, pr_id: i32) -> Result<Vec<Comment>, String>;
+    fn post_comment(&self, pr_id: i32, text: &str) -> Result<Comment, String>;
 }
 
 fn main() {
@@ -158,7 +165,8 @@ fn main() {
                         },
                         Ok(queued) => {
                             println!("{}Build Queued: {}", tabs(2), queued.webUrl);
-                            match post_queued_comment(&queued.webUrl, pr_commit, pr.id, &config.bitbucket) {
+                            let comment = make_queued_comment(&queued.webUrl, pr_commit);
+                            match config.bitbucket.post_comment(pr.id, &comment) {
                                 Ok(_) => {},
                                 Err(err) => println!("{}Error submitting comment: {}", tabs(2), err)
                             };
@@ -172,7 +180,8 @@ fn main() {
                         Some(status) => {
                             match status {
                                 teamcity::BuildStatus::SUCCESS => {
-                                    match post_success_comment(&build.webUrl, pr_commit, pr.id, &config.bitbucket) {
+                                    let comment = make_success_comment(&build.webUrl, pr_commit);
+                                    match config.bitbucket.post_comment(pr.id, &comment) {
                                         Ok(_) => {},
                                         Err(err) => println!("{}Error submitting comment: {}", tabs(2), err)
                                     };
@@ -182,7 +191,8 @@ fn main() {
                                         None => "".to_owned(),
                                         Some(x) => x.to_owned()
                                     };
-                                    match post_failure_comment(&build.webUrl, pr_commit, &status_text, pr.id, &config.bitbucket) {
+                                    let comment = make_failure_comment(&build.webUrl, pr_commit, &status_text);
+                                    match config.bitbucket.post_comment(pr.id, &comment) {
                                         Ok(_) => {},
                                         Err(err) => println!("{}Error submitting comment: {}", tabs(2), err)
                                     };
@@ -355,108 +365,16 @@ fn queue_build(config: &TeamcityCredentials, branch: &str)
     }
 }
 
-fn get_comment(pr_id: i32, config: &bitbucket::BitbucketCredentials)
-        -> Result<bitbucket::PagedApi<bitbucket::Activity>, String> {
-    let mut headers = Headers::new();
-    add_authorization_header(&mut headers, config as &UsernameAndPassword);
-    add_accept_json_header(&mut headers);
-
-    let client = Client::new();
-    let url = format!("{}/projects/{}/repos/{}/pull-requests/{}/activities?fromType=COMMENT",
-            config.base_url, config.project_slug, config.repo_slug, pr_id);
-    let mut response = match client
-            .get(&url)
-            .headers(headers).send() {
-        Ok(x) => x,
-        Err(err) => return Err(format!("Unable to retrieve comments: {}", err))
-    };
-
-    match response.status {
-        hyper::status::StatusCode::Ok => (),
-        e @ _ => return Err(e.to_string())
-    };
-
-    let mut json_string = String::new();
-    if let Err(err) = response.read_to_string(&mut json_string) {
-        return Err(format!("Unable to retrieve comments: {}", err))
-    }
-
-    match json::decode(&json_string) {
-        Ok(x) => Ok(x),
-        Err(err) =>  Err(format!("Error parsing response: {} {}", json_string, err))
-    }
+fn make_queued_comment(build_url: &str, commit_id: &str) -> String {
+    format!("⏳ [Build]({}) for commit {} queued", build_url, commit_id)
 }
 
-fn post_comment(comment: &str, pr_id: i32, config: &bitbucket::BitbucketCredentials)
-        -> Result<bitbucket::Comment, String> {
-    match get_comment(pr_id, &config) {
-        Ok(ref activities) => {
-            let activity = activities.values.iter()
-                .filter(|&activity| activity.comment.is_some())
-                .find(|&activity| activity.comment.as_ref().unwrap().text == comment);
-
-            match activity {
-                None => {},
-                Some(matching_activity) => {
-                    return Ok(matching_activity.clone().comment.unwrap().to_owned())
-                }
-            };
-        },
-        Err(err) => { println!("Error getting list of comments {}", err); }
-    };
-
-    let mut headers = Headers::new();
-    add_authorization_header(&mut headers, config as &UsernameAndPassword);
-    add_accept_json_header(&mut headers);
-    add_content_type_json_header(&mut headers);
-
-    let client = Client::new();
-    // FIXME: Format a proper template instead!
-    let body = json::encode(&bitbucket::CommentSubmit {
-        text: comment.to_owned()
-    }).unwrap();
-    let url = format!("{}/projects/{}/repos/{}/pull-requests/{}/comments",
-            config.base_url, config.project_slug, config.repo_slug, pr_id);
-    let mut response = match client
-            .post(&url)
-            .body(&body)
-            .headers(headers).send() {
-        Ok(x) => x,
-        Err(err) => return Err(format!("Unable to submit comment: {}", err))
-    };
-
-    match response.status {
-        hyper::status::StatusCode::Created => (),
-        e @ _ => return Err(e.to_string())
-    };
-
-    let mut json_string = String::new();
-    if let Err(err) = response.read_to_string(&mut json_string) {
-        return Err(format!("Unable to schedule build: {}", err))
-    }
-
-    match json::decode(&json_string) {
-        Ok(x) => Ok(x),
-        Err(err) =>  Err(format!("Error parsing response: {} {}", json_string, err))
-    }
+fn make_success_comment(build_url: &str, commit_id: &str) -> String {
+    format!("✔️ [Build]({}) for commit {} is **successful**", build_url, commit_id)
 }
 
-fn post_queued_comment(build_url: &str, commit_id: &str, pr_id: i32, config: &bitbucket::BitbucketCredentials)
-        -> Result<bitbucket::Comment, String> {
-    let comment = format!("⏳ [Build]({}) for commit {} queued", build_url, commit_id);
-    post_comment(&comment, pr_id, config)
-}
-
-fn post_success_comment(build_url: &str, commit_id: &str, pr_id: i32, config: &bitbucket::BitbucketCredentials)
-        -> Result<bitbucket::Comment, String> {
-    let comment = format!("✔️ [Build]({}) for commit {} is **successful**", build_url, commit_id);
-    post_comment(&comment, pr_id, config)
-}
-
-fn post_failure_comment(build_url: &str, commit_id: &str, build_message: &str, pr_id: i32, config: &bitbucket::BitbucketCredentials)
-        -> Result<bitbucket::Comment, String> {
-    let comment = format!("❌ [Build]({}) for commit {} has **failed**: {}", build_url, commit_id, build_message);
-    post_comment(&comment, pr_id, config)
+fn make_failure_comment(build_url: &str, commit_id: &str, build_message: &str) -> String {
+    format!("❌ [Build]({}) for commit {} has **failed**: {}", build_url, commit_id, build_message)
 }
 
 #[cfg(test)]

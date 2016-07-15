@@ -2,14 +2,10 @@ use std::collections::BTreeMap;
 use std::vec::Vec;
 use std::option::Option;
 
-use std::env;
-use std::fs::File;
+use hyper;
 use std::io::Read;
-use std::iter;
 use rustc_serialize::json;
 use hyper::client::Client;
-use hyper::header::{Headers, Authorization, Basic, Accept, qitem, ContentType};
-use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
@@ -154,6 +150,11 @@ impl ::Repository for BitbucketCredentials {
             Err(err) => return Err(format!("Unable to get list of PR: {}", err))
         };
 
+        match response.status {
+            hyper::status::StatusCode::Ok => (),
+            e @ _ => return Err(e.to_string())
+        };
+
         let mut json_string = String::new();
         if let Err(err) = response.read_to_string(&mut json_string) {
             return Err(format!("Unable to get a list of PR: {}", err))
@@ -171,6 +172,104 @@ impl ::Repository for BitbucketCredentials {
                 }).collect())
             },
             Err(err) =>  Err(format!("Error parsing response: {}", err))
+        }
+    }
+
+    fn get_comments(&self, pr_id: i32) -> Result<Vec<::Comment>, String> {
+        let mut headers = Headers::new();
+        ::add_authorization_header(&mut headers, self as &::UsernameAndPassword);
+
+        let client = Client::new();
+        let url = format!("{}/projects/{}/repos/{}/pull-requests/{}/activities?fromType=COMMENT",
+                self.base_url, self.project_slug, self.repo_slug, pr_id);
+        let mut response = match client
+                .get(&url)
+                .headers(headers).send() {
+            Ok(x) => x,
+            Err(err) => return Err(format!("Unable to retrieve comments: {}", err))
+        };
+
+        match response.status {
+            hyper::status::StatusCode::Ok => (),
+            e @ _ => return Err(e.to_string())
+        };
+
+        let mut json_string = String::new();
+        if let Err(err) = response.read_to_string(&mut json_string) {
+            return Err(format!("Unable to retrieve comments: {}", err))
+        }
+
+        match json::decode::<PagedApi<Activity>>(&json_string) {
+            Ok(activities) =>{
+                Ok(
+                    activities.values.iter()
+                        .filter(|&activity| activity.comment.is_some())
+                        .map(|ref activity| {
+                            // won't panic because of filter above
+                            let comment = activity.comment.as_ref().unwrap();
+                            ::Comment {
+                                id: comment.id,
+                                text: comment.text.to_owned()
+                            }
+                        })
+                        .collect()
+                )
+            },
+            Err(err) =>  Err(format!("Error parsing response: {} {}", json_string, err))
+        }
+    }
+
+    fn post_comment(&self, pr_id: i32, text: &str) -> Result<::Comment, String> {
+        match self.get_comments(pr_id) {
+            Ok(ref comments) => {
+                let found_comment = comments.iter().find(|&comment| comment.text == text);
+                match found_comment {
+                    Some(comment) => return Ok(comment.clone().to_owned()),
+                    None => {}
+                }
+            },
+            Err(err) => { println!("Error getting list of comments {}", err); }
+        };
+
+        let mut headers = Headers::new();
+        ::add_authorization_header(&mut headers, self as &::UsernameAndPassword);
+        ::add_accept_json_header(&mut headers);
+        ::add_content_type_json_header(&mut headers);
+
+        let client = Client::new();
+        let body = json::encode(&CommentSubmit {
+            text: text.to_owned()
+        }).unwrap();
+        let url = format!("{}/projects/{}/repos/{}/pull-requests/{}/comments",
+                self.base_url, self.project_slug, self.repo_slug, pr_id);
+        let mut response = match client
+                .post(&url)
+                .body(&body)
+                .headers(headers).send() {
+            Ok(x) => x,
+            Err(err) => return Err(format!("Unable to submit comment: {}", err))
+        };
+
+        match response.status {
+            hyper::status::StatusCode::Created => (),
+            e @ _ => return Err(e.to_string())
+        };
+
+        let mut json_string = String::new();
+        if let Err(err) = response.read_to_string(&mut json_string) {
+            return Err(format!("Unable to submit comment: {}", err))
+        }
+
+        match json::decode::<Comment>(&json_string) {
+            Ok(comment) => {
+                Ok(
+                    ::Comment {
+                        id: comment.id,
+                        text: comment.text.to_owned()
+                    }
+                )
+            },
+            Err(err) =>  Err(format!("Error parsing response: {} {}", json_string, err))
         }
     }
 }
