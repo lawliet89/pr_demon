@@ -144,25 +144,10 @@ impl ::Repository for BitbucketCredentials {
     fn get_pr_list(&self) -> Result<Vec<::PullRequest>, String> {
         let mut headers = Headers::new();
         rest::add_authorization_header(&mut headers, self as &::UsernameAndPassword);
-        let client = Client::new();
         let url = format!("{}/projects/{}/repos/{}/pull-requests",
             self.base_url, self.project_slug, self.repo_slug);
-        let mut response = match client.get(&url).headers(headers).send() {
-            Ok(x) => x,
-            Err(err) => return Err(format!("Unable to get list of PR: {}", err))
-        };
 
-        match response.status {
-            hyper::status::StatusCode::Ok => (),
-            e @ _ => return Err(e.to_string())
-        };
-
-        let mut json_string = String::new();
-        if let Err(err) = response.read_to_string(&mut json_string) {
-            return Err(format!("Unable to get a list of PR: {}", err))
-        }
-
-        match json::decode::<PagedApi<PullRequest>>(&json_string) {
+        match rest::get::<PagedApi<PullRequest>>(&url, &mut headers) {
             Ok(ref prs) => {
                 Ok(prs.values.iter().map( |ref pr| {
                     ::PullRequest {
@@ -173,35 +158,17 @@ impl ::Repository for BitbucketCredentials {
                     }
                 }).collect())
             },
-            Err(err) =>  Err(format!("Error parsing response: {}", err))
+            Err(err) =>  Err(format!("Error getting list of Pull Requests {}", err))
         }
     }
 
     fn get_comments(&self, pr_id: i32) -> Result<Vec<::Comment>, String> {
         let mut headers = Headers::new();
         rest::add_authorization_header(&mut headers, self as &::UsernameAndPassword);
-
-        let client = Client::new();
         let url = format!("{}/projects/{}/repos/{}/pull-requests/{}/activities?fromType=COMMENT",
                 self.base_url, self.project_slug, self.repo_slug, pr_id);
-        let mut response = match client
-                .get(&url)
-                .headers(headers).send() {
-            Ok(x) => x,
-            Err(err) => return Err(format!("Unable to retrieve comments: {}", err))
-        };
 
-        match response.status {
-            hyper::status::StatusCode::Ok => (),
-            e @ _ => return Err(e.to_string())
-        };
-
-        let mut json_string = String::new();
-        if let Err(err) = response.read_to_string(&mut json_string) {
-            return Err(format!("Unable to retrieve comments: {}", err))
-        }
-
-        match json::decode::<PagedApi<Activity>>(&json_string) {
+        match rest::get::<PagedApi<Activity>>(&url, &mut headers) {
             Ok(activities) =>{
                 Ok(
                     activities.values.iter()
@@ -217,7 +184,7 @@ impl ::Repository for BitbucketCredentials {
                         .collect()
                 )
             },
-            Err(err) =>  Err(format!("Error parsing response: {} {}", json_string, err))
+            Err(err) =>  Err(format!("Error getting comments {}", err))
         }
     }
 

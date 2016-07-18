@@ -214,27 +214,12 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
         rest::add_authorization_header(&mut headers, self as &::UsernameAndPassword);
         rest::add_accept_json_header(&mut headers);
 
-        let client = Client::new();
         let encoded_branch = utf8_percent_encode(branch, QUERY_ENCODE_SET).collect::<String>();
         let query_string = format!("state:any,branch:(name:{})", encoded_branch);
         let url = format!("{}/buildTypes/id:{}/builds?locator={}",
             self.base_url, self.build_id, query_string);
-        let mut response = match client.get(&url).headers(headers).send() {
-            Ok(x) => x,
-            Err(err) => return Err(format!("Unable to get list of Builds: {}", err))
-        };
 
-        match response.status {
-            hyper::status::StatusCode::Ok => (),
-            e @ _ => return Err(e.to_string())
-        };
-
-        let mut json_string = String::new();
-        if let Err(err) = response.read_to_string(&mut json_string) {
-            return Err(format!("Unable to get a list of Builds: {}", err))
-        }
-
-        match json::decode::<BuildList>(&json_string) {
+        match rest::get::<BuildList>(&url, &headers) {
             Ok(build_list) => {
                 Ok(
                     match build_list.build {
@@ -249,7 +234,7 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
                     }
                 )
             },
-            Err(err) =>  Err(format!("Error parsing response: {} {}", json_string, err))
+            Err(err) =>  Err(format!("Error getting list of builds {}", err))
         }
     }
 
@@ -258,28 +243,11 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
         rest::add_authorization_header(&mut headers, self as &::UsernameAndPassword);
         rest::add_accept_json_header(&mut headers);
 
-        let client = Client::new();
         let url = format!("{}/builds/id:{}", self.base_url, build_id);
-        let mut response = match client
-                .get(&url)
-                .headers(headers).send() {
-            Ok(x) => x,
-            Err(err) => return Err(format!("Unable to retrieve build: {}", err))
-        };
 
-        match response.status {
-            hyper::status::StatusCode::Ok => (),
-            e @ _ => return Err(e.to_string())
-        };
-
-        let mut json_string = String::new();
-        if let Err(err) = response.read_to_string(&mut json_string) {
-            return Err(format!("Unable to retrieve build: {}", err))
-        }
-
-        match json::decode::<Build>(&json_string) {
+        match rest::get::<Build>(&url, &headers) {
             Ok(build) => Ok(build.to_build_details()),
-            Err(err) => Err(format!("Error parsing response: {} {}", json_string, err))
+            Err(err) => Err(format!("Error getting build {}", err))
         }
     }
 
