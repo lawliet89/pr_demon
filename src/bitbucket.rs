@@ -140,12 +140,13 @@ impl ::UsernameAndPassword for BitbucketCredentials {
 
 impl ::Repository for BitbucketCredentials {
     fn get_pr_list(&self) -> Result<Vec<::PullRequest>, String> {
-        let mut headers = Headers::new();
-        rest::add_authorization_header(&mut headers, self as &::UsernameAndPassword);
+        let mut headers = rest::Headers::new();
+        headers.add_authorization_header(self as &::UsernameAndPassword)
+            .add_accept_json_header();
         let url = format!("{}/projects/{}/repos/{}/pull-requests",
             self.base_url, self.project_slug, self.repo_slug);
 
-        match rest::get::<PagedApi<PullRequest>>(&url, &mut headers) {
+        match rest::get::<PagedApi<PullRequest>>(&url, &headers.headers) {
             Ok(ref prs) => {
                 Ok(prs.values.iter().map( |ref pr| {
                     ::PullRequest {
@@ -161,12 +162,13 @@ impl ::Repository for BitbucketCredentials {
     }
 
     fn get_comments(&self, pr_id: i32) -> Result<Vec<::Comment>, String> {
-        let mut headers = Headers::new();
-        rest::add_authorization_header(&mut headers, self as &::UsernameAndPassword);
+        let mut headers = rest::Headers::new();
+        headers.add_authorization_header(self as &::UsernameAndPassword)
+            .add_accept_json_header();
         let url = format!("{}/projects/{}/repos/{}/pull-requests/{}/activities?fromType=COMMENT",
                 self.base_url, self.project_slug, self.repo_slug, pr_id);
 
-        match rest::get::<PagedApi<Activity>>(&url, &mut headers) {
+        match rest::get::<PagedApi<Activity>>(&url, &headers.headers) {
             Ok(activities) =>{
                 Ok(
                     activities.values.iter()
@@ -198,10 +200,10 @@ impl ::Repository for BitbucketCredentials {
             Err(err) => { println!("Error getting list of comments {}", err); }
         };
 
-        let mut headers = Headers::new();
-        rest::add_authorization_header(&mut headers, self as &::UsernameAndPassword);
-        rest::add_accept_json_header(&mut headers);
-        rest::add_content_type_json_header(&mut headers);
+        let mut headers = rest::Headers::new();
+        headers.add_authorization_header(self as &::UsernameAndPassword)
+            .add_accept_json_header()
+            .add_content_type_json_header();
 
         let body = json::encode(&CommentSubmit {
             text: text.to_owned()
@@ -209,7 +211,7 @@ impl ::Repository for BitbucketCredentials {
         let url = format!("{}/projects/{}/repos/{}/pull-requests/{}/comments",
                 self.base_url, self.project_slug, self.repo_slug, pr_id);
 
-        match rest::post::<Comment>(&url, &body, &headers, &hyper::status::StatusCode::Ok) {
+        match rest::post::<Comment>(&url, &body, &headers.headers, &hyper::status::StatusCode::Ok) {
             Ok(comment) => {
                 Ok(
                     ::Comment {

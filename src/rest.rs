@@ -3,44 +3,63 @@ use rustc_serialize;
 use rustc_serialize::json;
 use hyper;
 use hyper::client::Client;
-use hyper::header::{Headers, Authorization, Basic, Accept, qitem, ContentType};
+use hyper::header::{Authorization, Basic, Accept, qitem, ContentType};
 use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 
-pub fn add_authorization_header(headers: &mut Headers, credentials: &::UsernameAndPassword) {
-    headers.set(
-       Authorization(
-           Basic {
-               username: credentials.username().clone(),
-               password: Some(credentials.password().clone())
-           }
-       )
-    );
+pub struct Headers {
+    pub headers: hyper::header::Headers
 }
 
-pub fn add_accept_json_header(headers: &mut Headers) {
-    headers.set(
-        Accept(vec![
-            qitem(Mime(TopLevel::Application, SubLevel::Json,
-                       vec![(Attr::Charset, Value::Utf8)])),
-        ])
-    );
+impl Headers {
+    pub fn new() -> Headers {
+        Headers {
+            headers: hyper::header::Headers::new()
+        }
+    }
+
+    pub fn add_authorization_header(&mut self, credentials: &::UsernameAndPassword)
+            -> &mut Headers {
+        self.headers.set(
+           Authorization(
+               Basic {
+                   username: credentials.username().clone(),
+                   password: Some(credentials.password().clone())
+               }
+           )
+        );
+        self
+    }
+
+    pub fn add_accept_json_header(&mut self) -> &mut Headers {
+        self.headers.set(
+            Accept(vec![
+                qitem(Mime(TopLevel::Application, SubLevel::Json,
+                           vec![(Attr::Charset, Value::Utf8)])),
+            ])
+        );
+        self
+    }
+
+    pub fn add_content_type_json_header(&mut self) -> &mut Headers {
+        self.headers.set(
+            ContentType(Mime(TopLevel::Application, SubLevel::Json,
+                             vec![(Attr::Charset, Value::Utf8)]))
+        );
+        self
+    }
+
+    pub fn add_content_type_xml_header(&mut self) -> &mut Headers {
+        self.headers.set(
+            ContentType(Mime(TopLevel::Application, SubLevel::Xml,
+                             vec![(Attr::Charset, Value::Utf8)]))
+        );
+        self
+    }
 }
 
-pub fn add_content_type_xml_header(headers: &mut Headers) {
-    headers.set(
-        ContentType(Mime(TopLevel::Application, SubLevel::Xml,
-                         vec![(Attr::Charset, Value::Utf8)]))
-    );
-}
 
-pub fn add_content_type_json_header(headers: &mut Headers) {
-    headers.set(
-        ContentType(Mime(TopLevel::Application, SubLevel::Json,
-                         vec![(Attr::Charset, Value::Utf8)]))
-    );
-}
 
-pub fn get<T>(url: &str, headers: &Headers) -> Result<T, String>
+pub fn get<T>(url: &str, headers: &hyper::header::Headers) -> Result<T, String>
     where T: rustc_serialize::Decodable {
     let client = Client::new();
     let mut response = match client.get(url).headers(headers.to_owned()).send() {
@@ -64,7 +83,7 @@ pub fn get<T>(url: &str, headers: &Headers) -> Result<T, String>
     }
 }
 
-pub fn post<T>(url: &str, body: &str, headers: &Headers, status_code: &hyper::status::StatusCode)
+pub fn post<T>(url: &str, body: &str, headers: &hyper::header::Headers, status_code: &hyper::status::StatusCode)
          -> Result<T, String> where T: rustc_serialize::Decodable {
     let client = Client::new();
     let mut response = match client

@@ -1,6 +1,5 @@
 use ::rest;
 use hyper;
-use hyper::header::Headers;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
@@ -207,16 +206,16 @@ pub struct Property {
 
 impl ::ContinuousIntegrator for TeamcityCredentials {
     fn get_build_list(&self, branch: &str) -> Result<Vec<::Build>, String> {
-        let mut headers = Headers::new();
-        rest::add_authorization_header(&mut headers, self as &::UsernameAndPassword);
-        rest::add_accept_json_header(&mut headers);
+        let mut headers = rest::Headers::new();
+        headers.add_authorization_header(self as &::UsernameAndPassword)
+            .add_accept_json_header();
 
         let encoded_branch = utf8_percent_encode(branch, QUERY_ENCODE_SET).collect::<String>();
         let query_string = format!("state:any,branch:(name:{})", encoded_branch);
         let url = format!("{}/buildTypes/id:{}/builds?locator={}",
             self.base_url, self.build_id, query_string);
 
-        match rest::get::<BuildList>(&url, &headers) {
+        match rest::get::<BuildList>(&url, &headers.headers) {
             Ok(build_list) => {
                 Ok(
                     match build_list.build {
@@ -236,23 +235,23 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
     }
 
     fn get_build(&self, build_id: i32) -> Result<::BuildDetails, String> {
-        let mut headers = Headers::new();
-        rest::add_authorization_header(&mut headers, self as &::UsernameAndPassword);
-        rest::add_accept_json_header(&mut headers);
+        let mut headers = rest::Headers::new();
+        headers.add_authorization_header(self as &::UsernameAndPassword)
+            .add_accept_json_header();
 
         let url = format!("{}/builds/id:{}", self.base_url, build_id);
 
-        match rest::get::<Build>(&url, &headers) {
+        match rest::get::<Build>(&url, &headers.headers) {
             Ok(build) => Ok(build.to_build_details()),
             Err(err) => Err(format!("Error getting build {}", err))
         }
     }
 
     fn queue_build(&self, branch: &str) -> Result<::BuildDetails, String> {
-        let mut headers = Headers::new();
-        rest::add_authorization_header(&mut headers, self as &::UsernameAndPassword);
-        rest::add_accept_json_header(&mut headers);
-        rest::add_content_type_xml_header(&mut headers);
+        let mut headers = rest::Headers::new();
+        headers.add_authorization_header(self as &::UsernameAndPassword)
+            .add_accept_json_header()
+            .add_content_type_xml_header();
 
         // FIXME: Format a proper template instead!
         let body = format!("<build branchName=\"{}\">
@@ -261,7 +260,7 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
                         </build>", branch, self.build_id);
         let url = format!("{}/buildQueue", self.base_url);
 
-        match rest::post::<Build>(&url, &body, &headers, &hyper::status::StatusCode::Ok) {
+        match rest::post::<Build>(&url, &body, &headers.headers, &hyper::status::StatusCode::Ok) {
             Ok(build) => Ok(build.to_build_details()),
             Err(err) => Err(format!("Error queuing build {}", err))
         }
