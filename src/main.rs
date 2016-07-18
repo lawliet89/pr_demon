@@ -118,8 +118,12 @@ fn main() {
         for pr in &pull_requests {
             println!("{}Pull Request #{} ({})", tabs(1), pr.id, pr.web_url);
             match get_latest_build(&pr, &config.teamcity) {
-                None => schedule_build(&pr, &config.teamcity, &config.bitbucket),
-                Some(build) =>  check_build_status(&pr, &build, &config.bitbucket)
+                None => {
+                    let _ = schedule_build(&pr, &config.teamcity, &config.bitbucket);
+                },
+                Some(build) =>  {
+                    let _ = check_build_status(&pr, &build, &config.bitbucket);
+                }
             };
         }
         std::thread::sleep(sleep_duration);
@@ -230,33 +234,42 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
     }
 }
 
-fn schedule_build(pr: &PullRequest, ci: &ContinuousIntegrator, repo: &Repository) {
+fn schedule_build(pr: &PullRequest, ci: &ContinuousIntegrator, repo: &Repository)
+    -> Result<(BuildDetails, Comment), String> {
     println!("{}Scheduling build", tabs(2));
     let queued_build = ci.queue_build(&pr.branch_name());
     match queued_build {
         Err(err) => {
             println!("{}Error queuing build: {}", tabs(2), err);
+            return Err(err)
         },
         Ok(queued) => {
             println!("{}Build Queued: {}", tabs(2), queued.web_url);
             let comment = make_queued_comment(&queued.web_url, &pr.from_commit);
             match repo.post_comment(pr.id, &comment) {
-                Ok(_) => {},
-                Err(err) => println!("{}Error submitting comment: {}", tabs(2), err)
-            };
+                Ok(comment) => Ok((queued, comment)),
+                Err(err) => {
+                    println!("{}Error submitting comment: {}", tabs(2), err);
+                    Err(err)
+                }
+            }
         }
     }
 }
 
-fn check_build_status(pr: &PullRequest, build: &BuildDetails, repo: &Repository) {
+fn check_build_status(pr: &PullRequest, build: &BuildDetails, repo: &Repository)
+    -> Result<Comment, String> {
     println!("{}Build exists: {}", tabs(2), build.web_url);
     match build.status {
         BuildStatus::Success => {
             let comment = make_success_comment(&build.web_url, &pr.from_commit);
             match repo.post_comment(pr.id, &comment) {
-                Ok(_) => {},
-                Err(err) => println!("{}Error submitting comment: {}", tabs(2), err)
-            };
+                Ok(comment) => Ok(comment),
+                Err(err) => {
+                    println!("{}Error submitting comment: {}", tabs(2), err);
+                    Err(err)
+                }
+            }
         },
         _ if build.state == BuildState::Finished => {
             let status_text = match build.status_text {
@@ -265,21 +278,112 @@ fn check_build_status(pr: &PullRequest, build: &BuildDetails, repo: &Repository)
             };
             let comment = make_failure_comment(&build.web_url, &pr.from_commit, &status_text);
             match repo.post_comment(pr.id, &comment) {
-                Ok(_) => {},
-                Err(err) => println!("{}Error submitting comment: {}", tabs(2), err)
-            };
+                Ok(comment) => Ok(comment),
+                Err(err) => {
+                    println!("{}Error submitting comment: {}", tabs(2), err);
+                    Err(err)
+                }
+            }
         },
-        _ => {}
+        _ => {
+            Err("Some pathological error has occurred".to_owned())
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{bitbucket, teamcity, Config, PullRequest, ContinuousIntegrator, Build};
-    use super::{BuildDetails, BuildStatus, BuildState};
-    use super::{read_config, parse_config, tabs, get_latest_build};
+    use super::{BuildDetails, BuildStatus, BuildState, Repository, Comment};
+    use super::{read_config, parse_config, tabs, get_latest_build, schedule_build};
+    use super::{make_queued_comment, make_success_comment, make_failure_comment, check_build_status};
     use std::fs::File;
     use std::io::{Read, Cursor};
+
+    struct StubBuild {
+        build_list: Result<Vec<Build>, String>,
+        build: Result<BuildDetails, String>,
+        queued: Result<BuildDetails, String>
+    }
+    impl ContinuousIntegrator for StubBuild {
+        fn get_build_list(&self, _: &str) -> Result<Vec<Build>, String> {
+           self.build_list.clone().to_owned()
+        }
+        fn get_build(&self, _: i32) -> Result<BuildDetails, String> {
+           self.build.clone().to_owned()
+        }
+
+        fn queue_build(&self, _: &str) -> Result<BuildDetails, String> {
+           self.queued.clone().to_owned()
+        }
+    }
+
+    struct StubRepository {
+        pr_list: Result<Vec<PullRequest>, String>,
+        get_comments: Result<Vec<Comment>, String>,
+        post_comment: Result<Comment, String>
+    }
+
+    impl Repository for StubRepository {
+        fn get_pr_list(&self) -> Result<Vec<PullRequest>, String> {
+            self.pr_list.clone().to_owned()
+        }
+        fn get_comments(&self, _: i32) -> Result<Vec<Comment>, String> {
+            self.get_comments.clone().to_owned()
+        }
+        fn post_comment(&self, _: i32, _: &str) -> Result<Comment, String> {
+            self.post_comment.clone().to_owned()
+        }
+    }
+
+    fn pull_request() -> PullRequest {
+        PullRequest {
+            id: 111,
+            web_url: "http://www.foobar.com/pr/111".to_owned(),
+            from_ref: "refs/heads/branch_name".to_owned(),
+            from_commit: "363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned()
+        }
+    }
+
+    fn build_success() -> BuildDetails {
+        BuildDetails {
+            id: 213232321,
+            web_url: "http://www.goodbuilds.com/213213221".to_owned(),
+            commit: Some("363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned()),
+            state: BuildState::Finished,
+            status: BuildStatus::Success,
+            status_text: Some("Build passed with flying colours".to_owned())
+        }
+    }
+
+    fn build_queuing() -> BuildDetails {
+        BuildDetails {
+            id: 213232321,
+            web_url: "http://www.goodbuilds.com/1111".to_owned(),
+            commit: Some("363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned()),
+            state: BuildState::Queued,
+            status: BuildStatus::Unknown,
+            status_text: None
+        }
+    }
+
+    fn build_failure() -> BuildDetails {
+        BuildDetails {
+            id: 213232321,
+            web_url: "http://www.goodbuilds.com/213213221".to_owned(),
+            commit: Some("363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned()),
+            state: BuildState::Finished,
+            status: BuildStatus::Failure,
+            status_text: Some("Build failed with walking monochrome".to_owned())
+        }
+    }
+
+    fn comment(text: &str) -> Comment {
+        Comment {
+            id: 123,
+            text: text.to_owned()
+        }
+    }
 
     #[test]
     fn it_reads_from_config_file() {
@@ -331,55 +435,6 @@ mod tests {
         let expected = "        ";
         let actual = tabs(2);
         assert_eq!(expected, actual);
-    }
-
-    fn pull_request() -> PullRequest {
-        PullRequest {
-            id: 111,
-            web_url: "http://www.foobar.com/pr/111".to_owned(),
-            from_ref: "refs/heads/branch_name".to_owned(),
-            from_commit: "363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned()
-        }
-    }
-
-    fn build_success() -> BuildDetails {
-        BuildDetails {
-            id: 213232321,
-            web_url: "http://www.goodbuilds.com/213213221".to_owned(),
-            commit: Some("363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned()),
-            state: BuildState::Finished,
-            status: BuildStatus::Success,
-            status_text: Some("Build passed with flying colours".to_owned())
-        }
-    }
-
-    fn build_queuing() -> BuildDetails {
-        BuildDetails {
-            id: 213232321,
-            web_url: "http://www.goodbuilds.com/1111".to_owned(),
-            commit: Some("363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned()),
-            state: BuildState::Queued,
-            status: BuildStatus::Unknown,
-            status_text: None
-        }
-    }
-
-    struct StubBuild {
-        build_list: Result<Vec<Build>, String>,
-        build: Result<BuildDetails, String>,
-        queued: Result<BuildDetails, String>
-    }
-    impl ContinuousIntegrator for StubBuild {
-        fn get_build_list(&self, _: &str) -> Result<Vec<Build>, String> {
-           self.build_list.clone().to_owned()
-        }
-        fn get_build(&self, _: i32) -> Result<BuildDetails, String> {
-           self.build.clone().to_owned()
-        }
-
-        fn queue_build(&self, _: &str) -> Result<BuildDetails, String> {
-           self.queued.clone().to_owned()
-        }
     }
 
     #[test]
@@ -471,5 +526,57 @@ mod tests {
 
         let actual = get_latest_build(&pull_request(), &stub_build);
         assert_eq!(None, actual);
+    }
+
+    #[test]
+    fn schedule_build_posts_a_comment_on_scheduling() {
+        let build = build_queuing();
+        let expected_comment = comment(&make_queued_comment(&build.web_url, &build.commit.clone().unwrap()));
+        let stub_build = StubBuild {
+            build_list: Err("This does not matter".to_owned()),
+            build: Err("This does not matter".to_owned()),
+            queued: Ok(build.to_owned())
+        };
+
+        let stub_repo = StubRepository {
+            pr_list: Err("This does not matter".to_owned()),
+            get_comments: Ok(vec![]),
+            post_comment: Ok(expected_comment.to_owned())
+        };
+
+        let actual = schedule_build(&pull_request(), &stub_build, &stub_repo).unwrap();
+        assert_eq!((build, expected_comment), actual);
+    }
+
+    #[test]
+    fn check_build_status_returns_success_comment_on_build_success() {
+        let build = build_success();
+        let expected_comment = comment(&make_success_comment(&build.web_url, &build.commit.clone().unwrap()));
+
+        let stub_repo = StubRepository {
+            pr_list: Err("This does not matter".to_owned()),
+            get_comments: Ok(vec![]),
+            post_comment: Ok(expected_comment.to_owned())
+        };
+
+        let actual = check_build_status(&pull_request(), &build, &stub_repo).unwrap();
+        assert_eq!(expected_comment, actual);
+    }
+
+    #[test]
+    fn check_build_status_returns_failure_comment_on_build_failure() {
+        let build = build_failure();
+        let expected_comment = comment(&make_failure_comment(&build.web_url,
+                                                             &build.commit.clone().unwrap(),
+                                                             &build.status_text.clone().unwrap()));
+
+        let stub_repo = StubRepository {
+            pr_list: Err("This does not matter".to_owned()),
+            get_comments: Ok(vec![]),
+            post_comment: Ok(expected_comment.to_owned())
+        };
+
+        let actual = check_build_status(&pull_request(), &build, &stub_repo).unwrap();
+        assert_eq!(expected_comment, actual);
     }
 }
