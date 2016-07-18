@@ -5,7 +5,6 @@ use std::option::Option;
 use ::rest;
 use hyper;
 use rustc_serialize::json;
-use hyper::header::Headers;
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
@@ -211,7 +210,7 @@ impl ::Repository for BitbucketCredentials {
         let url = format!("{}/projects/{}/repos/{}/pull-requests/{}/comments",
                 self.base_url, self.project_slug, self.repo_slug, pr_id);
 
-        match rest::post::<Comment>(&url, &body, &headers.headers, &hyper::status::StatusCode::Ok) {
+        match rest::post::<Comment>(&url, &body, &headers.headers, &hyper::status::StatusCode::Created) {
             Ok(comment) => {
                 Ok(
                     ::Comment {

@@ -33,6 +33,13 @@ pub struct PullRequest {
     pub from_commit: String
 }
 
+impl PullRequest {
+    fn branch_name(&self) -> String {
+        let git_ref = &self.from_ref;
+        git_ref.split('/').skip(2).collect::<Vec<_>>().join("/")
+    }
+}
+
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct Comment {
     pub id: i32,
@@ -110,106 +117,9 @@ fn main() {
 
         for pr in &pull_requests {
             println!("{}Pull Request #{} ({})", tabs(1), pr.id, pr.web_url);
-            let git_ref = &pr.from_ref;
-            let branch_name: String = git_ref.split('/').skip(2).collect::<Vec<_>>().join("/");
-            let pr_commit = &pr.from_commit;
-            println!("{}Branch: {}", tabs(2), branch_name);
-            println!("{}Commit: {}", tabs(2), pr_commit);
-            println!("{}Finding latest build from branch", tabs(2));
-
-            let latest_build = match config.teamcity.get_build_list(&branch_name) {
-                Ok(ref build_list) => {
-                    if build_list.is_empty() {
-                        println!("{}Build does not exist -- running build", tabs(2));
-                        None
-                    } else {
-                        let latest_build_id = build_list.first().unwrap().id;
-                        match config.teamcity.get_build(latest_build_id) {
-                            Ok(build) =>  {
-                                println!("{}Latest Build Found {}", tabs(2), build.web_url);
-                                Some(build)
-                            },
-                            Err(err) => {
-                                println!("{}Unable to retrieve information for build ID {}: {}", tabs(2), latest_build_id, err);
-                                None
-                            }
-                        }
-                    }
-                },
-                Err(err) => {
-                    println!("{}Error fetching builds -- queuing anyway: {}", tabs(2), err);
-                    None
-                }
-            };
-
-            let build_found = match latest_build {
-                None => None,
-                Some(ref build) => {
-                    match build.commit {
-                        Some(ref commit) => {
-                            if commit == pr_commit {
-                                println!("{}Commit matches -- skipping", tabs(2));
-                                Some(build.to_owned())
-                            } else {
-                                println!("{}Commit does not match with {} -- scheduling build", tabs(2), commit);
-                                None
-                            }
-                        },
-                        None if build.state == BuildState::Queued => {
-                            println!("{}Build is queued -- skipping", tabs(2));
-                            Some(build.to_owned())
-                        },
-                        _ => {
-                            println!("{}Unknown error -- scheduling build", tabs(2));
-                            None
-                        }
-                    }
-                }
-            };
-
-            match build_found {
-                None => {
-                    println!("{}Scheduling build", tabs(2));
-                    let queued_build = config.teamcity.queue_build(&branch_name);
-                    match queued_build {
-                        Err(err) => {
-                            println!("{}Error queuing build: {}", tabs(2), err);
-                            continue;
-                        },
-                        Ok(queued) => {
-                            println!("{}Build Queued: {}", tabs(2), queued.web_url);
-                            let comment = make_queued_comment(&queued.web_url, pr_commit);
-                            match config.bitbucket.post_comment(pr.id, &comment) {
-                                Ok(_) => {},
-                                Err(err) => println!("{}Error submitting comment: {}", tabs(2), err)
-                            };
-                        }
-                    }
-                },
-                Some(build) => {
-                    println!("{}Build exists: {}", tabs(2), build.web_url);
-                    match build.status {
-                        BuildStatus::Success => {
-                            let comment = make_success_comment(&build.web_url, pr_commit);
-                            match config.bitbucket.post_comment(pr.id, &comment) {
-                                Ok(_) => {},
-                                Err(err) => println!("{}Error submitting comment: {}", tabs(2), err)
-                            };
-                        },
-                        _ if build.state == BuildState::Finished => {
-                            let status_text = match build.status_text {
-                                None => "".to_owned(),
-                                Some(x) => x.to_owned()
-                            };
-                            let comment = make_failure_comment(&build.web_url, pr_commit, &status_text);
-                            match config.bitbucket.post_comment(pr.id, &comment) {
-                                Ok(_) => {},
-                                Err(err) => println!("{}Error submitting comment: {}", tabs(2), err)
-                            };
-                        },
-                        _ => {}
-                    }
-                }
+            match get_latest_build(&pr, &config.teamcity) {
+                None => schedule_build(&pr, &config.teamcity, &config.bitbucket),
+                Some(build) =>  check_build_status(&pr, &build, &config.bitbucket)
             };
         }
         std::thread::sleep(sleep_duration);
@@ -261,9 +171,111 @@ fn make_failure_comment(build_url: &str, commit_id: &str, build_message: &str) -
     format!("❌ [Build]({}) for commit {} has **failed**: {}", build_url, commit_id, build_message)
 }
 
+fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<BuildDetails> {
+    let branch_name = pr.branch_name();
+    let pr_commit = &pr.from_commit;
+
+    println!("{}Branch: {}", tabs(2), branch_name);
+    println!("{}Commit: {}", tabs(2), pr_commit);
+    println!("{}Finding latest build from branch", tabs(2));
+
+    let latest_build = match ci.get_build_list(&branch_name) {
+        Ok(ref build_list) => {
+            if build_list.is_empty() {
+                println!("{}Build does not exist -- running build", tabs(2));
+                None
+            } else {
+                let latest_build_id = build_list.first().unwrap().id;
+                match ci.get_build(latest_build_id) {
+                    Ok(build) =>  {
+                        println!("{}Latest Build Found {}", tabs(2), build.web_url);
+                        Some(build)
+                    },
+                    Err(err) => {
+                        println!("{}Unable to retrieve information for build ID {}: {}", tabs(2), latest_build_id, err);
+                        None
+                    }
+                }
+            }
+        },
+        Err(err) => {
+            println!("{}Error fetching builds -- queuing anyway: {}", tabs(2), err);
+            None
+        }
+    };
+
+    match latest_build {
+        None => None,
+        Some(ref build) => {
+            match build.commit {
+                Some(ref commit) => {
+                    if commit == pr_commit {
+                        println!("{}Commit matches -- skipping", tabs(2));
+                        Some(build.to_owned())
+                    } else {
+                        println!("{}Commit does not match with {} -- scheduling build", tabs(2), commit);
+                        None
+                    }
+                },
+                None if build.state == BuildState::Queued => {
+                    println!("{}Build is queued -- skipping", tabs(2));
+                    Some(build.to_owned())
+                },
+                _ => {
+                    println!("{}Unknown error -- scheduling build", tabs(2));
+                    None
+                }
+            }
+        }
+    }
+}
+
+fn schedule_build(pr: &PullRequest, ci: &ContinuousIntegrator, repo: &Repository) {
+    println!("{}Scheduling build", tabs(2));
+    let queued_build = ci.queue_build(&pr.branch_name());
+    match queued_build {
+        Err(err) => {
+            println!("{}Error queuing build: {}", tabs(2), err);
+        },
+        Ok(queued) => {
+            println!("{}Build Queued: {}", tabs(2), queued.web_url);
+            let comment = make_queued_comment(&queued.web_url, &pr.from_commit);
+            match repo.post_comment(pr.id, &comment) {
+                Ok(_) => {},
+                Err(err) => println!("{}Error submitting comment: {}", tabs(2), err)
+            };
+        }
+    }
+}
+
+fn check_build_status(pr: &PullRequest, build: &BuildDetails, repo: &Repository) {
+    println!("{}Build exists: {}", tabs(2), build.web_url);
+    match build.status {
+        BuildStatus::Success => {
+            let comment = make_success_comment(&build.web_url, &pr.from_commit);
+            match repo.post_comment(pr.id, &comment) {
+                Ok(_) => {},
+                Err(err) => println!("{}Error submitting comment: {}", tabs(2), err)
+            };
+        },
+        _ if build.state == BuildState::Finished => {
+            let status_text = match build.status_text {
+                None => "".to_owned(),
+                Some(ref build_state) => build_state.to_owned()
+            };
+            let comment = make_failure_comment(&build.web_url, &pr.from_commit, &status_text);
+            match repo.post_comment(pr.id, &comment) {
+                Ok(_) => {},
+                Err(err) => println!("{}Error submitting comment: {}", tabs(2), err)
+            };
+        },
+        _ => {}
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{bitbucket, teamcity, Config, read_config, parse_config};
+    use super::{bitbucket, teamcity, Config, read_config, parse_config, tabs};
     use std::fs::File;
     use std::io::{Read, Cursor};
 
@@ -309,6 +321,13 @@ mod tests {
         let json_string = read_config("tests/fixtures/config.json", Cursor::new("")).unwrap();
         let actual = parse_config(&json_string).unwrap();
 
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn it_generate_tabs() {
+        let expected = "        ";
+        let actual = tabs(2);
         assert_eq!(expected, actual);
     }
 }
