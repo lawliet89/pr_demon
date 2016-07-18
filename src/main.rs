@@ -275,7 +275,9 @@ fn check_build_status(pr: &PullRequest, build: &BuildDetails, repo: &Repository)
 
 #[cfg(test)]
 mod tests {
-    use super::{bitbucket, teamcity, Config, read_config, parse_config, tabs};
+    use super::{bitbucket, teamcity, Config, PullRequest, ContinuousIntegrator, Build};
+    use super::{BuildDetails, BuildStatus, BuildState};
+    use super::{read_config, parse_config, tabs, get_latest_build};
     use std::fs::File;
     use std::io::{Read, Cursor};
 
@@ -328,6 +330,52 @@ mod tests {
     fn it_generate_tabs() {
         let expected = "        ";
         let actual = tabs(2);
+        assert_eq!(expected, actual);
+    }
+
+    fn pr() -> PullRequest {
+        PullRequest {
+            id: 111,
+            web_url: "http://www.foobar.com/pr/111".to_owned(),
+            from_ref: "refs/heads/branch_name".to_owned(),
+            from_commit: "363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned()
+        }
+    }
+
+    struct BuildExists {
+        build: BuildDetails
+    }
+    impl ContinuousIntegrator for BuildExists {
+        fn get_build_list(&self, _: &str) -> Result<Vec<Build>, String> {
+            Ok(
+                vec![Build { id: 213232321 }, Build { id: 21323232}]
+            )
+        }
+        fn get_build(&self, _: i32) -> Result<BuildDetails, String> {
+            Ok(self.build.clone().to_owned())
+        }
+
+        fn queue_build(&self, _: &str) -> Result<BuildDetails, String> {
+            Ok(self.build.clone().to_owned())
+        }
+    }
+
+    #[test]
+    fn it_gets_latest_buiild_successfully() {
+        let expected = BuildDetails {
+            id: 213232321,
+            web_url: "http://www.goodbuilds.com/213213221".to_owned(),
+            commit: Some("363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned()),
+            state: BuildState::Finished,
+            status: BuildStatus::Success,
+            status_text: Some("Build passed with flying colours".to_owned())
+        };
+        let stub_build = BuildExists {
+            build: expected.clone().to_owned()
+        };
+
+        let pr = pr();
+        let actual = get_latest_build(&pr, &stub_build).unwrap();
         assert_eq!(expected, actual);
     }
 }
