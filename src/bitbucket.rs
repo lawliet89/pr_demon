@@ -4,9 +4,7 @@ use std::option::Option;
 
 use ::rest;
 use hyper;
-use std::io::Read;
 use rustc_serialize::json;
-use hyper::client::Client;
 use hyper::header::Headers;
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
@@ -205,31 +203,13 @@ impl ::Repository for BitbucketCredentials {
         rest::add_accept_json_header(&mut headers);
         rest::add_content_type_json_header(&mut headers);
 
-        let client = Client::new();
         let body = json::encode(&CommentSubmit {
             text: text.to_owned()
         }).unwrap();
         let url = format!("{}/projects/{}/repos/{}/pull-requests/{}/comments",
                 self.base_url, self.project_slug, self.repo_slug, pr_id);
-        let mut response = match client
-                .post(&url)
-                .body(&body)
-                .headers(headers).send() {
-            Ok(x) => x,
-            Err(err) => return Err(format!("Unable to submit comment: {}", err))
-        };
 
-        match response.status {
-            hyper::status::StatusCode::Created => (),
-            e @ _ => return Err(e.to_string())
-        };
-
-        let mut json_string = String::new();
-        if let Err(err) = response.read_to_string(&mut json_string) {
-            return Err(format!("Unable to submit comment: {}", err))
-        }
-
-        match json::decode::<Comment>(&json_string) {
+        match rest::post::<Comment>(&url, &body, &headers, &hyper::status::StatusCode::Ok) {
             Ok(comment) => {
                 Ok(
                     ::Comment {
@@ -238,7 +218,7 @@ impl ::Repository for BitbucketCredentials {
                     }
                 )
             },
-            Err(err) =>  Err(format!("Error parsing response: {} {}", json_string, err))
+            Err(err) =>  Err(format!("Error posting comment {}", err))
         }
     }
 }

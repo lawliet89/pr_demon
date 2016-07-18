@@ -1,8 +1,5 @@
 use ::rest;
 use hyper;
-use std::io::Read;
-use rustc_serialize::json;
-use hyper::client::Client;
 use hyper::header::Headers;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
@@ -257,34 +254,16 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
         rest::add_accept_json_header(&mut headers);
         rest::add_content_type_xml_header(&mut headers);
 
-        let client = Client::new();
         // FIXME: Format a proper template instead!
         let body = format!("<build branchName=\"{}\">
                           <buildType id=\"{}\"/>
                           <comment><text>Triggered by PR Demon</text></comment>
                         </build>", branch, self.build_id);
         let url = format!("{}/buildQueue", self.base_url);
-        let mut response = match client
-                .post(&url)
-                .body(&body)
-                .headers(headers).send() {
-            Ok(response) => response,
-            Err(err) => return Err(format!("Unable to schedule build: {}", err))
-        };
 
-        match response.status {
-            hyper::status::StatusCode::Ok => (),
-            e @ _ => return Err(e.to_string())
-        };
-
-        let mut json_string = String::new();
-        if let Err(err) = response.read_to_string(&mut json_string) {
-            return Err(format!("Unable to schedule build: {}", err))
-        }
-
-        match json::decode::<Build>(&json_string) {
+        match rest::post::<Build>(&url, &body, &headers, &hyper::status::StatusCode::Ok) {
             Ok(build) => Ok(build.to_build_details()),
-            Err(err) => Err(format!("Error parsing response: {} {}", json_string, err))
+            Err(err) => Err(format!("Error queuing build {}", err))
         }
     }
 }
