@@ -1,4 +1,4 @@
-# pr_demon
+# pr_demon ![Build status](https://travis-ci.org/lawliet89/pr_demon.svg)
 A daemon to monitor pull requests (PR) from Bitbucket and trigger builds for the PR on Teamcity.
 
 ## Configuration
@@ -14,4 +14,3 @@ container using `docker-compose up -d --build`
  - Write tests
  - Refactor HTTP methods
  - Refactor to better support other CI tools and SCM
- 
