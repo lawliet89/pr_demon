@@ -333,7 +333,7 @@ mod tests {
         assert_eq!(expected, actual);
     }
 
-    fn pr() -> PullRequest {
+    fn pull_request() -> PullRequest {
         PullRequest {
             id: 111,
             web_url: "http://www.foobar.com/pr/111".to_owned(),
@@ -342,40 +342,134 @@ mod tests {
         }
     }
 
-    struct BuildExists {
-        build: BuildDetails
-    }
-    impl ContinuousIntegrator for BuildExists {
-        fn get_build_list(&self, _: &str) -> Result<Vec<Build>, String> {
-            Ok(
-                vec![Build { id: 213232321 }, Build { id: 21323232}]
-            )
-        }
-        fn get_build(&self, _: i32) -> Result<BuildDetails, String> {
-            Ok(self.build.clone().to_owned())
-        }
-
-        fn queue_build(&self, _: &str) -> Result<BuildDetails, String> {
-            Ok(self.build.clone().to_owned())
-        }
-    }
-
-    #[test]
-    fn it_gets_latest_buiild_successfully() {
-        let expected = BuildDetails {
+    fn build_success() -> BuildDetails {
+        BuildDetails {
             id: 213232321,
             web_url: "http://www.goodbuilds.com/213213221".to_owned(),
             commit: Some("363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned()),
             state: BuildState::Finished,
             status: BuildStatus::Success,
             status_text: Some("Build passed with flying colours".to_owned())
-        };
-        let stub_build = BuildExists {
-            build: expected.clone().to_owned()
+        }
+    }
+
+    fn build_queuing() -> BuildDetails {
+        BuildDetails {
+            id: 213232321,
+            web_url: "http://www.goodbuilds.com/1111".to_owned(),
+            commit: Some("363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned()),
+            state: BuildState::Queued,
+            status: BuildStatus::Unknown,
+            status_text: None
+        }
+    }
+
+    struct StubBuild {
+        build_list: Result<Vec<Build>, String>,
+        build: Result<BuildDetails, String>,
+        queued: Result<BuildDetails, String>
+    }
+    impl ContinuousIntegrator for StubBuild {
+        fn get_build_list(&self, _: &str) -> Result<Vec<Build>, String> {
+           self.build_list.clone().to_owned()
+        }
+        fn get_build(&self, _: i32) -> Result<BuildDetails, String> {
+           self.build.clone().to_owned()
+        }
+
+        fn queue_build(&self, _: &str) -> Result<BuildDetails, String> {
+           self.queued.clone().to_owned()
+        }
+    }
+
+    #[test]
+    fn get_latest_build_returns_latest_buiild_successfully() {
+        let expected = &build_success();
+        let stub_build = StubBuild {
+            build_list: Ok(vec![Build { id: 213232321 }, Build { id: 21323232}]),
+            build: Ok(expected.to_owned()),
+            queued: Err("This does not matter".to_owned())
         };
 
-        let pr = pr();
-        let actual = get_latest_build(&pr, &stub_build).unwrap();
-        assert_eq!(expected, actual);
+        let actual = get_latest_build(&pull_request(), &stub_build).unwrap();
+        assert_eq!(expected, &actual);
+    }
+
+    #[test]
+    fn get_latest_build_returns_none_if_no_builds_found() {
+        let stub_build = StubBuild {
+            build_list: Ok(vec![]),
+            build: Err("ignored".to_owned()),
+            queued: Err("This does not matter".to_owned())
+        };
+        let actual = get_latest_build(&pull_request(), &stub_build);
+        assert_eq!(None, actual);
+    }
+
+    #[test]
+    fn get_latest_build_returns_none_if_commit_mismatches() {
+        let mut build = build_success();
+        build.commit = Some("foobar".to_owned());
+
+        let stub_build = StubBuild {
+            build_list: Ok(vec![Build { id: 213232321 }, Build { id: 21323232}]),
+            build: Ok(build.to_owned()),
+            queued: Err("This does not matter".to_owned())
+        };
+
+        let actual = get_latest_build(&pull_request(), &stub_build);
+        assert_eq!(None, actual);
+    }
+
+    #[test]
+    fn get_latest_build_returns_build_if_build_queued() {
+        let expected = &build_queuing();
+        let stub_build = StubBuild {
+            build_list: Ok(vec![Build { id: 213232321 }, Build { id: 21323232}]),
+            build: Ok(expected.to_owned()),
+            queued: Err("This does not matter".to_owned())
+        };
+
+        let actual = get_latest_build(&pull_request(), &stub_build).unwrap();
+        assert_eq!(expected, &actual);
+    }
+
+    #[test]
+    fn get_latest_build_returns_none_for_error_fetching_build_list() {
+        let stub_build = StubBuild {
+            build_list: Err("foobar".to_owned()),
+            build: Err("This does not matter".to_owned()),
+            queued: Err("This does not matter".to_owned())
+        };
+
+        let actual = get_latest_build(&pull_request(), &stub_build);
+        assert_eq!(None, actual);
+    }
+
+    #[test]
+    fn get_latest_build_returns_none_for_error_fetching_build() {
+        let stub_build = StubBuild {
+            build_list: Ok(vec![Build { id: 213232321 }, Build { id: 21323232}]),
+            build: Err("foobar".to_owned()),
+            queued: Err("This does not matter".to_owned())
+        };
+
+        let actual = get_latest_build(&pull_request(), &stub_build);
+        assert_eq!(None, actual);
+    }
+
+    #[test]
+    fn get_latest_build_returns_none_for_pathlogical_errors() {
+        let mut build = build_success();
+        build.commit = None;
+
+        let stub_build = StubBuild {
+            build_list: Ok(vec![Build { id: 213232321 }, Build { id: 21323232}]),
+            build: Ok(build.to_owned()),
+            queued: Err("This does not matter".to_owned())
+        };
+
+        let actual = get_latest_build(&pull_request(), &stub_build);
+        assert_eq!(None, actual);
     }
 }
