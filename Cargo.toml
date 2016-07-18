@@ -1,7 +1,11 @@
 [package]
 name = "pr_demon"
 version = "0.1.0"
-authors = ["Yong Wen Chua <ida@yongwen.xyz>"]
+authors = ["Yong Wen Chua <me@yongwen.xyz>"]
+
+[[bin]]
+name = "pr_demon"
+test = true
 
 [dependencies]
 hyper = "*"
