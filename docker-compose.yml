@@ -1,0 +1,7 @@
+version: '2'
+services:
+  pr_demon:
+    build: .
+    restart: "always"
+    volumes:
+      - ./config:/app/src/config
