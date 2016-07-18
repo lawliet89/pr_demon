@@ -8,8 +8,9 @@ mod teamcity;
 
 use std::env;
 use std::fs::File;
-use std::io::Read;
+use std::io::{self, Read};
 use std::iter;
+use std::boxed::Box;
 use rustc_serialize::json;
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
@@ -82,9 +83,14 @@ pub trait ContinuousIntegrator {
 fn main() {
     let config_path = match env::args().nth(1) {
         Some(x) => x,
-        None => panic!("Usage ./pr_demon path_to_config.json")
+        None => panic!("Usage ./pr_demon path_to_   config.json")
     };
-    let config = match read_config(&config_path) {
+    let config_json = match read_config(&config_path, io::stdin()) {
+        Ok(x) => x,
+        Err(err) => panic!(err)
+    };
+
+    let config = match parse_config(&config_json) {
         Ok(x) => x,
         Err(err) => panic!(err)
     };
@@ -215,17 +221,28 @@ fn tabs(x: usize) -> String {
     iter::repeat("    ").take(x).collect()
 }
 
-fn read_config(path: &str) -> Result<Config, String> {
-    let mut file = match File::open(path) {
-        Ok(f) => f,
-        Err(err) => return Err(format!("Unable to read file because: {}", err))
+fn read_config<R>(path: &str, reader: R) -> Result<String, String>
+        where R : std::io::Read {
+    let mut file : Box<std::io::Read> = match path {
+        "-" => {
+            Box::new(reader)
+        },
+        path @ _ => {
+            match File::open(path) {
+                Ok(f) => Box::new(f),
+                Err(err) => return Err(format!("Unable to read file because: {}", err))
+            }
+        }
     };
 
     let mut json = String::new();
-    if let Err(err) = file.read_to_string(&mut json) {
-        return Err(format!("Unable to read config: {}", err))
+    match file.read_to_string(&mut json) {
+        Ok(_) => Ok(json),
+        Err(err) => Err(format!("Unable to read config: {}", err))
     }
+}
 
+fn parse_config(json: &str) -> Result<Config, String> {
     match json::decode(&json) {
         Ok(x) => Ok(x),
         Err(err) => return Err(format!("Unable to decode JSON value {}", err))
@@ -246,9 +263,29 @@ fn make_failure_comment(build_url: &str, commit_id: &str, build_message: &str) -
 
 #[cfg(test)]
 mod tests {
-    use super::bitbucket;
-    use super::teamcity;
-    use super::{Config, read_config};
+    use super::{bitbucket, teamcity, Config, read_config, parse_config};
+    use std::fs::File;
+    use std::io::{Read, Cursor};
+
+    #[test]
+    fn it_reads_from_config_file() {
+        let mut expected = String::new();
+        if let Err(err) = File::open("tests/fixtures/config.json")
+                                .unwrap().read_to_string(&mut expected) {
+                                    panic!("Unable to read fixture: {}", err);
+                                }
+        let actual = read_config("tests/fixtures/config.json", Cursor::new("")).unwrap();
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn it_reads_fron_stdin_when_presented_with_dash() {
+        let payload = "foo bar baz";
+        let input = Cursor::new(payload);
+
+        let actual = read_config("-", input).unwrap();
+        assert_eq!(payload, actual);
+    }
 
     #[test]
     fn it_reads_and_parses_a_config_file() {
@@ -269,7 +306,8 @@ mod tests {
             run_interval: 999
         };
 
-        let actual = read_config("tests/fixtures/config.json").unwrap();
+        let json_string = read_config("tests/fixtures/config.json", Cursor::new("")).unwrap();
+        let actual = parse_config(&json_string).unwrap();
 
         assert_eq!(expected, actual);
     }

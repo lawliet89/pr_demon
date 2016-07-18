@@ -8,4 +8,4 @@ COPY . ./
 RUN cargo build --release
 
 ENTRYPOINT ["cargo"]
-CMD ["run", "--release"]
+CMD ["run", "--release", "--", "-"]
