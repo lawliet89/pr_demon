@@ -260,33 +260,35 @@ fn schedule_build(pr: &PullRequest, ci: &ContinuousIntegrator, repo: &Repository
 fn check_build_status(pr: &PullRequest, build: &BuildDetails, repo: &Repository)
     -> Result<Comment, String> {
     println!("{}Build exists: {}", tabs(2), build.web_url);
-    match build.status {
-        BuildStatus::Success => {
-            let comment = make_success_comment(&build.web_url, &pr.from_commit);
-            match repo.post_comment(pr.id, &comment) {
-                Ok(comment) => Ok(comment),
-                Err(err) => {
-                    println!("{}Error submitting comment: {}", tabs(2), err);
-                    Err(err)
+    match build.state {
+        BuildState::Finished => match build.status {
+            BuildStatus::Success => {
+                let comment = make_success_comment(&build.web_url, &pr.from_commit);
+                match repo.post_comment(pr.id, &comment) {
+                    Ok(comment) => Ok(comment),
+                    Err(err) => {
+                        println!("{}Error submitting comment: {}", tabs(2), err);
+                        Err(err)
+                    }
                 }
-            }
-        },
-        _ if build.state == BuildState::Finished => {
-            let status_text = match build.status_text {
-                None => "".to_owned(),
-                Some(ref build_state) => build_state.to_owned()
-            };
-            let comment = make_failure_comment(&build.web_url, &pr.from_commit, &status_text);
-            match repo.post_comment(pr.id, &comment) {
-                Ok(comment) => Ok(comment),
-                Err(err) => {
-                    println!("{}Error submitting comment: {}", tabs(2), err);
-                    Err(err)
+            },
+            _  => {
+                let status_text = match build.status_text {
+                    None => "".to_owned(),
+                    Some(ref build_state) => build_state.to_owned()
+                };
+                let comment = make_failure_comment(&build.web_url, &pr.from_commit, &status_text);
+                match repo.post_comment(pr.id, &comment) {
+                    Ok(comment) => Ok(comment),
+                    Err(err) => {
+                        println!("{}Error submitting comment: {}", tabs(2), err);
+                        Err(err)
+                    }
                 }
             }
         },
         _ => {
-            Err("Some pathological error has occurred".to_owned())
+            Err("Build is still running".to_owned())
         }
     }
 }
@@ -366,6 +368,18 @@ mod tests {
             status_text: None
         }
     }
+
+    fn build_running() -> BuildDetails {
+        BuildDetails {
+            id: 213232321,
+            web_url: "http://www.goodbuilds.com/1111".to_owned(),
+            commit: Some("363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned()),
+            state: BuildState::Running,
+            status: BuildStatus::Success,
+            status_text: None
+        }
+    }
+
 
     fn build_failure() -> BuildDetails {
         BuildDetails {
@@ -578,5 +592,33 @@ mod tests {
 
         let actual = check_build_status(&pull_request(), &build, &stub_repo).unwrap();
         assert_eq!(expected_comment, actual);
+    }
+
+    #[test]
+    fn check_build_status_returns_an_err_for_queued_builds() {
+        let build = build_queuing();
+
+        let stub_repo = StubRepository {
+            pr_list: Err("This does not matter".to_owned()),
+            get_comments: Ok(vec![]),
+            post_comment: Err("This does not matter".to_owned())
+        };
+
+        let actual = check_build_status(&pull_request(), &build, &stub_repo);
+        assert_eq!(Err("Build is still running".to_owned()), actual);
+    }
+
+    #[test]
+    fn check_build_status_returns_an_err_for_running_builds() {
+        let build = build_running();
+
+        let stub_repo = StubRepository {
+            pr_list: Err("This does not matter".to_owned()),
+            get_comments: Ok(vec![]),
+            post_comment: Err("This does not matter".to_owned())
+        };
+
+        let actual = check_build_status(&pull_request(), &build, &stub_repo);
+        assert_eq!(Err("Build is still running".to_owned()), actual);
     }
 }

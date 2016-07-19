@@ -57,8 +57,6 @@ impl Headers {
     }
 }
 
-
-
 pub fn get<T>(url: &str, headers: &hyper::header::Headers) -> Result<T, String>
     where T: rustc_serialize::Decodable {
     let client = Client::new();
