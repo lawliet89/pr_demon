@@ -127,6 +127,16 @@ pub struct BitbucketCredentials {
     pub repo_slug: String
 }
 
+impl BitbucketCredentials {
+    fn matching_comments(comments: &Vec<::Comment>, text: &str) -> Option<::Comment> {
+        let found_comment = comments.iter().find(|&comment| comment.text == text);
+        match found_comment {
+            Some(comment) => Some(comment.clone().to_owned()),
+            None => None
+        }
+    }
+}
+
 impl ::UsernameAndPassword for BitbucketCredentials {
     fn username(&self) -> &String {
         &self.username
@@ -190,9 +200,8 @@ impl ::Repository for BitbucketCredentials {
     fn post_comment(&self, pr_id: i32, text: &str) -> Result<::Comment, String> {
         match self.get_comments(pr_id) {
             Ok(ref comments) => {
-                let found_comment = comments.iter().find(|&comment| comment.text == text);
-                match found_comment {
-                    Some(comment) => return Ok(comment.clone().to_owned()),
+                match BitbucketCredentials::matching_comments(&comments, &text) {
+                    Some(comment) => return Ok(comment),
                     None => {}
                 }
             },
@@ -221,5 +230,34 @@ impl ::Repository for BitbucketCredentials {
             },
             Err(err) =>  Err(format!("Error posting comment {}", err))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::BitbucketCredentials;
+    use super::super::Comment;
+
+    #[test]
+    fn matching_comments_returns_matching_comment_text() {
+        let expected_text = "Foo Bar Baz";
+        let expected_comment = Comment {
+            id: 1,
+            text: expected_text.to_owned()
+        };
+
+        let comments = vec![expected_comment.clone(),
+            Comment {
+                id: 2,
+                text: "Fizz buzz".to_owned()
+            },
+            Comment {
+                id: 3,
+                text: "Lorem Ipsum".to_owned()
+            }
+        ];
+
+        let actual = BitbucketCredentials::matching_comments(&comments, &expected_text);
+        assert_eq!(Some(expected_comment), actual);
     }
 }

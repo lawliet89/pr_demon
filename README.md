@@ -11,6 +11,5 @@ Alternatively, if you place the configuration file in `./config/config.json`, yo
 container using `docker-compose up -d --build`
 
 ## TODOs:
- - Write tests
- - Refactor HTTP methods
+ - Find a way to mock HTTP Requests
  - Refactor to better support other CI tools and SCM
