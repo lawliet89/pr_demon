@@ -3,7 +3,6 @@ use rustc_serialize;
 use rustc_serialize::json;
 use hyper;
 use hyper::client::Client;
-use hyper::client::response::Response;
 use hyper::header::{Authorization, Basic, Accept, qitem, ContentType};
 use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 
