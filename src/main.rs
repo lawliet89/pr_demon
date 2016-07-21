@@ -48,8 +48,9 @@ pub struct Comment {
 
 pub trait Repository {
     fn get_pr_list(&self) -> Result<Vec<PullRequest>, String>;
-    fn get_comments(&self, pr_id: i32) -> Result<Vec<Comment>, String>;
-    fn post_comment(&self, pr_id: i32, text: &str) -> Result<Comment, String>;
+    fn build_queued(&self, pr: &PullRequest, build: &BuildDetails) -> Result<(), String>;
+    fn build_success(&self, pr: &PullRequest, build: &BuildDetails) -> Result<(), String>;
+    fn build_failure(&self, pr: &PullRequest, build: &BuildDetails) -> Result<(), String>;
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
@@ -119,10 +120,16 @@ fn main() {
             println!("{}Pull Request #{} ({})", tabs(1), pr.id, pr.web_url);
             match get_latest_build(&pr, &config.teamcity) {
                 None => {
-                    let _ = schedule_build(&pr, &config.teamcity, &config.bitbucket);
+                    match schedule_build(&pr, &config.teamcity, &config.bitbucket) {
+                        Err(err) => println!("{}{}", tabs(2), err),
+                        Ok(_) => {}
+                    }
                 },
                 Some(build) =>  {
-                    let _ = check_build_status(&pr, &build, &config.bitbucket);
+                    match check_build_status(&pr, &build, &config.bitbucket) {
+                        Err(err) => println!("{}{}", tabs(2), err),
+                        Ok(_) => {}
+                    }
                 }
             };
         }
@@ -235,7 +242,7 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
 }
 
 fn schedule_build(pr: &PullRequest, ci: &ContinuousIntegrator, repo: &Repository)
-    -> Result<(BuildDetails, Comment), String> {
+    -> Result<BuildDetails, String> {
     println!("{}Scheduling build", tabs(2));
     let queued_build = ci.queue_build(&pr.branch_name());
     match queued_build {
@@ -245,13 +252,9 @@ fn schedule_build(pr: &PullRequest, ci: &ContinuousIntegrator, repo: &Repository
         },
         Ok(queued) => {
             println!("{}Build Queued: {}", tabs(2), queued.web_url);
-            let comment = make_queued_comment(&queued.web_url, &pr.from_commit);
-            match repo.post_comment(pr.id, &comment) {
-                Ok(comment) => Ok((queued, comment)),
-                Err(err) => {
-                    println!("{}Error submitting comment: {}", tabs(2), err);
-                    Err(err)
-                }
+            match repo.build_queued(&pr, &queued) {
+                Ok(_) => Ok(queued),
+                Err(err) => Err(err)
             }
         }
     }
@@ -263,27 +266,15 @@ fn check_build_status(pr: &PullRequest, build: &BuildDetails, repo: &Repository)
     match build.state {
         BuildState::Finished => match build.status {
             BuildStatus::Success => {
-                let comment = make_success_comment(&build.web_url, &pr.from_commit);
-                match repo.post_comment(pr.id, &comment) {
+                match repo.build_success(&pr, &build) {
                     Ok(_) => Ok((BuildState::Finished, BuildStatus::Success)),
-                    Err(err) => {
-                        println!("{}Error submitting comment: {}", tabs(2), err);
-                        Err(err)
-                    }
+                    Err(err) => Err(err)
                 }
             },
             ref status @ _  => {
-                let status_text = match build.status_text {
-                    None => "".to_owned(),
-                    Some(ref build_state) => build_state.to_owned()
-                };
-                let comment = make_failure_comment(&build.web_url, &pr.from_commit, &status_text);
-                match repo.post_comment(pr.id, &comment) {
-                    Ok(_) => Ok((BuildState::Finished, status.to_owned())),
-                    Err(err) => {
-                        println!("{}Error submitting comment: {}", tabs(2), err);
-                        Err(err)
-                    }
+                match repo.build_failure(&pr, &build) {
+                    Ok(_) => Ok((BuildState::Finished,  status.to_owned())),
+                    Err(err) => Err(err)
                 }
             }
         },
@@ -296,9 +287,9 @@ fn check_build_status(pr: &PullRequest, build: &BuildDetails, repo: &Repository)
 #[cfg(test)]
 mod tests {
     use super::{bitbucket, teamcity, Config, PullRequest, ContinuousIntegrator, Build};
-    use super::{BuildDetails, BuildStatus, BuildState, Repository, Comment};
+    use super::{BuildDetails, BuildStatus, BuildState, Repository};
     use super::{read_config, parse_config, tabs, get_latest_build, schedule_build};
-    use super::{make_queued_comment, check_build_status};
+    use super::{check_build_status};
     use std::fs::File;
     use std::io::{Read, Cursor};
 
@@ -322,19 +313,23 @@ mod tests {
 
     struct StubRepository {
         pr_list: Result<Vec<PullRequest>, String>,
-        get_comments: Result<Vec<Comment>, String>,
-        post_comment: Result<Comment, String>
+        queued: Result<(), String>,
+        success: Result<(), String>,
+        failure: Result<(), String>
     }
 
     impl Repository for StubRepository {
         fn get_pr_list(&self) -> Result<Vec<PullRequest>, String> {
             self.pr_list.clone().to_owned()
         }
-        fn get_comments(&self, _: i32) -> Result<Vec<Comment>, String> {
-            self.get_comments.clone().to_owned()
+        fn build_queued(&self, _: &PullRequest, _: &BuildDetails) -> Result<(), String> {
+            self.queued.clone().to_owned()
         }
-        fn post_comment(&self, _: i32, _: &str) -> Result<Comment, String> {
-            self.post_comment.clone().to_owned()
+        fn build_success(&self, _: &PullRequest, _: &BuildDetails) -> Result<(), String> {
+            self.success.clone().to_owned()
+        }
+        fn build_failure(&self, _: &PullRequest, _: &BuildDetails) -> Result<(), String> {
+            self.failure.clone().to_owned()
         }
     }
 
@@ -389,13 +384,6 @@ mod tests {
             state: BuildState::Finished,
             status: BuildStatus::Failure,
             status_text: Some("Build failed with walking monochrome".to_owned())
-        }
-    }
-
-    fn comment(text: &str) -> Comment {
-        Comment {
-            id: 123,
-            text: text.to_owned()
         }
     }
 
@@ -543,9 +531,8 @@ mod tests {
     }
 
     #[test]
-    fn schedule_build_posts_a_comment_on_scheduling() {
+    fn schedule_build_returns_build_on_scheduling() {
         let build = build_queuing();
-        let expected_comment = comment(&make_queued_comment(&build.web_url, &build.commit.clone().unwrap()));
         let stub_build = StubBuild {
             build_list: Err("This does not matter".to_owned()),
             build: Err("This does not matter".to_owned()),
@@ -554,22 +541,23 @@ mod tests {
 
         let stub_repo = StubRepository {
             pr_list: Err("This does not matter".to_owned()),
-            get_comments: Ok(vec![]),
-            post_comment: Ok(expected_comment.to_owned())
+            success: Ok(()),
+            failure: Ok(()),
+            queued: Ok(())
         };
 
-        let actual = schedule_build(&pull_request(), &stub_build, &stub_repo).unwrap();
-        assert_eq!((build, expected_comment), actual);
+        let actual = schedule_build(&pull_request(), &stub_build, &stub_repo);
+        assert_eq!(Ok(build), actual);
     }
 
     #[test]
     fn check_build_status_returns_correct_state_and_status_on_build_success() {
         let build = build_success();
-        let comment = comment("this does not matter");
         let stub_repo = StubRepository {
             pr_list: Err("This does not matter".to_owned()),
-            get_comments: Ok(vec![]),
-            post_comment: Ok(comment.to_owned())
+            success: Ok(()),
+            failure: Ok(()),
+            queued: Ok(())
         };
 
         let actual = check_build_status(&pull_request(), &build, &stub_repo);
@@ -579,11 +567,11 @@ mod tests {
     #[test]
     fn check_build_status_returns_correct_state_and_status_on_build_failure() {
         let build = build_failure();
-        let comment = comment("this does not matter");
         let stub_repo = StubRepository {
             pr_list: Err("This does not matter".to_owned()),
-            get_comments: Ok(vec![]),
-            post_comment: Ok(comment.to_owned())
+            success: Ok(()),
+            failure: Ok(()),
+            queued: Ok(())
         };
 
         let actual = check_build_status(&pull_request(), &build, &stub_repo);
@@ -596,8 +584,9 @@ mod tests {
 
         let stub_repo = StubRepository {
             pr_list: Err("This does not matter".to_owned()),
-            get_comments: Ok(vec![]),
-            post_comment: Err("This does not matter".to_owned())
+            success: Ok(()),
+            failure: Ok(()),
+            queued: Ok(())
         };
 
         let actual = check_build_status(&pull_request(), &build, &stub_repo);
@@ -610,8 +599,9 @@ mod tests {
 
         let stub_repo = StubRepository {
             pr_list: Err("This does not matter".to_owned()),
-            get_comments: Ok(vec![]),
-            post_comment: Err("This does not matter".to_owned())
+            success: Ok(()),
+            failure: Ok(()),
+            queued: Ok(())
         };
 
         let actual = check_build_status(&pull_request(), &build, &stub_repo);
