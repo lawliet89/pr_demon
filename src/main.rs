@@ -49,6 +49,7 @@ pub struct Comment {
 pub trait Repository {
     fn get_pr_list(&self) -> Result<Vec<PullRequest>, String>;
     fn build_queued(&self, pr: &PullRequest, build: &BuildDetails) -> Result<(), String>;
+    fn build_running(&self, pr: &PullRequest, build: &BuildDetails) -> Result<(), String>;
     fn build_success(&self, pr: &PullRequest, build: &BuildDetails) -> Result<(), String>;
     fn build_failure(&self, pr: &PullRequest, build: &BuildDetails) -> Result<(), String>;
 }
@@ -274,13 +275,22 @@ fn check_build_status(pr: &PullRequest, build: &BuildDetails, repo: &Repository)
             },
             ref status @ _  => {
                 match repo.build_failure(&pr, &build) {
-                    Ok(_) => Ok((BuildState::Finished,  status.to_owned())),
+                    Ok(_) => Ok((BuildState::Finished, status.to_owned())),
                     Err(err) => Err(err)
                 }
             }
         },
-        ref state @ _ => {
-            Ok((state.to_owned(), build.status.to_owned()))
+        BuildState::Running => {
+            match repo.build_running(&pr, &build) {
+                Ok(_) => Ok((BuildState::Running, build.status.to_owned())),
+                Err(err) => Err(err)
+            }
+        },
+        BuildState::Queued  => {
+            match repo.build_queued(&pr, &build) {
+                Ok(_) => Ok((BuildState::Queued, build.status.to_owned())),
+                Err(err) => Err(err)
+            }
         }
     }
 }
@@ -315,6 +325,7 @@ mod tests {
     struct StubRepository {
         pr_list: Result<Vec<PullRequest>, String>,
         queued: Result<(), String>,
+        running: Result<(), String>,
         success: Result<(), String>,
         failure: Result<(), String>
     }
@@ -325,6 +336,9 @@ mod tests {
         }
         fn build_queued(&self, _: &PullRequest, _: &BuildDetails) -> Result<(), String> {
             self.queued.clone().to_owned()
+        }
+        fn build_running(&self, _: &PullRequest, _: &BuildDetails) -> Result<(), String> {
+            self.running.clone().to_owned()
         }
         fn build_success(&self, _: &PullRequest, _: &BuildDetails) -> Result<(), String> {
             self.success.clone().to_owned()
@@ -547,6 +561,7 @@ mod tests {
         let stub_repo = StubRepository {
             pr_list: Err("This does not matter".to_owned()),
             success: Ok(()),
+            running: Ok(()),
             failure: Ok(()),
             queued: Ok(())
         };
@@ -561,6 +576,7 @@ mod tests {
         let stub_repo = StubRepository {
             pr_list: Err("This does not matter".to_owned()),
             success: Ok(()),
+            running: Ok(()),
             failure: Ok(()),
             queued: Ok(())
         };
@@ -575,6 +591,7 @@ mod tests {
         let stub_repo = StubRepository {
             pr_list: Err("This does not matter".to_owned()),
             success: Ok(()),
+            running: Ok(()),
             failure: Ok(()),
             queued: Ok(())
         };
@@ -590,6 +607,7 @@ mod tests {
         let stub_repo = StubRepository {
             pr_list: Err("This does not matter".to_owned()),
             success: Ok(()),
+            running: Ok(()),
             failure: Ok(()),
             queued: Ok(())
         };
@@ -605,6 +623,7 @@ mod tests {
         let stub_repo = StubRepository {
             pr_list: Err("This does not matter".to_owned()),
             success: Ok(()),
+            running: Ok(()),
             failure: Ok(()),
             queued: Ok(())
         };

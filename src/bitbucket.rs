@@ -193,10 +193,14 @@ impl ::Repository for BitbucketCredentials {
             Ok(_) => {},
             Err(err) => return Err(format!("Error submitting comment: {}", err))
         };
-        match self.post_build(&build) {
+        match self.post_build(&build, &pr) {
             Ok(_) => Ok(()),
             Err(err) => return Err(format!("Error posting build: {}", err))
         }
+    }
+
+    fn build_running(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String>  {
+        self.build_queued(&pr, &build)
     }
 
     fn build_success(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
@@ -206,7 +210,7 @@ impl ::Repository for BitbucketCredentials {
             Err(err) => return Err(format!("Error submitting comment: {}", err))
         };
 
-        match self.post_build(&build) {
+        match self.post_build(&build, &pr) {
             Ok(_) => Ok(()),
             Err(err) => Err(format!("Error posting build: {}", err))
         }
@@ -222,7 +226,7 @@ impl ::Repository for BitbucketCredentials {
             Ok(_) => {},
             Err(err) => return Err(format!("Error submitting comment: {}", err))
         };
-        match self.post_build(&build) {
+        match self.post_build(&build, &pr) {
             Ok(_) => Ok(()),
             Err(err) => Err(format!("Error posting build: {}", err))
         }
@@ -293,10 +297,8 @@ impl BitbucketCredentials {
     }
 
 
-    fn post_build(&self, build: &::BuildDetails) -> Result<Build, String> {
+    fn post_build(&self, build: &::BuildDetails, pr: &::PullRequest) -> Result<Build, String> {
         let bitbucket_build = BitbucketCredentials::make_build(&build);
-
-        let commit = build.commit.clone().unwrap();
 
         let mut headers = rest::Headers::new();
         headers.add_authorization_header(self as &::UsernameAndPassword)
@@ -304,8 +306,7 @@ impl BitbucketCredentials {
             .add_content_type_json_header();
 
         let body = json::encode(&bitbucket_build).unwrap();
-        let url = format!("{}/build-status/1.0/commits/{}",
-                self.base_url, commit);
+        let url = format!("{}/build-status/1.0/commits/{}", self.base_url, pr.from_commit);
 
         match rest::post_raw(&url, &body, &headers.headers) {
             Ok(response) => {
