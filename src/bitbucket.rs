@@ -170,6 +170,36 @@ impl ::Repository for BitbucketCredentials {
         }
     }
 
+    fn build_queued(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
+        let comment = ::make_queued_comment(&build.web_url, &pr.from_commit);
+        match self.post_comment(pr.id, &comment) {
+            Ok(_) => Ok(()),
+            Err(err) =>  Err(format!("Error submitting comment: {}", err))
+        }
+    }
+
+    fn build_success(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
+        let comment = ::make_success_comment(&build.web_url, &pr.from_commit);
+        match self.post_comment(pr.id, &comment) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(format!("Error submitting comment: {}", err))
+        }
+    }
+
+    fn build_failure(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
+        let status_text = match build.status_text {
+            None => "".to_owned(),
+            Some(ref build_state) => build_state.to_owned()
+        };
+        let comment = ::make_failure_comment(&build.web_url, &pr.from_commit, &status_text);
+        match self.post_comment(pr.id, &comment) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(format!("Error submitting comment: {}", err))
+        }
+    }
+}
+
+impl BitbucketCredentials {
     fn get_comments(&self, pr_id: i32) -> Result<Vec<::Comment>, String> {
         let mut headers = rest::Headers::new();
         headers.add_authorization_header(self as &::UsernameAndPassword)
