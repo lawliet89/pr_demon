@@ -294,28 +294,7 @@ impl BitbucketCredentials {
 
 
     fn post_build(&self, build: &::BuildDetails) -> Result<Build, String> {
-        let build_status = match build.state {
-            ::BuildState::Finished => {
-                match build.status {
-                    ::BuildStatus::Success => BuildState::SUCCESSFUL,
-                    _ => BuildState::INPROGRESS
-                }
-            },
-            _ => BuildState::INPROGRESS
-        };
-
-        let description = match build.status_text {
-            None => "".to_owned(),
-            Some(ref text) => text.to_owned()
-        };
-
-        let bitbucket_build = Build {
-            state: build_status.to_owned(),
-            key: build.build_id.to_owned(),
-            name: build.id.to_string(),
-            url: build.web_url.to_owned(),
-            description: description.to_owned()
-        };
+        let bitbucket_build = BitbucketCredentials::make_build(&build);
 
         let commit = build.commit.clone().unwrap();
 
@@ -336,6 +315,31 @@ impl BitbucketCredentials {
                 }
             },
             Err(err) =>  Err(format!("Error posting build {}", err))
+        }
+    }
+
+    fn make_build(build: &::BuildDetails) -> Build {
+        let build_status = match build.state {
+            ::BuildState::Finished => {
+                match build.status {
+                    ::BuildStatus::Success => BuildState::SUCCESSFUL,
+                    _ => BuildState::FAILED
+                }
+            },
+            _ => BuildState::INPROGRESS
+        };
+
+        let description = match build.status_text {
+            None => "".to_owned(),
+            Some(ref text) => text.to_owned()
+        };
+
+        Build {
+            state: build_status.to_owned(),
+            key: build.build_id.to_owned(),
+            name: build.id.to_string(),
+            url: build.web_url.to_owned(),
+            description: description.to_owned()
         }
     }
 }
