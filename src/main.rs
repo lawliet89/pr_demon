@@ -258,28 +258,28 @@ fn schedule_build(pr: &PullRequest, ci: &ContinuousIntegrator, repo: &Repository
 }
 
 fn check_build_status(pr: &PullRequest, build: &BuildDetails, repo: &Repository)
-    -> Result<Comment, String> {
+    -> Result<(BuildState, BuildStatus), String> {
     println!("{}Build exists: {}", tabs(2), build.web_url);
     match build.state {
         BuildState::Finished => match build.status {
             BuildStatus::Success => {
                 let comment = make_success_comment(&build.web_url, &pr.from_commit);
                 match repo.post_comment(pr.id, &comment) {
-                    Ok(comment) => Ok(comment),
+                    Ok(_) => Ok((BuildState::Finished, BuildStatus::Success)),
                     Err(err) => {
                         println!("{}Error submitting comment: {}", tabs(2), err);
                         Err(err)
                     }
                 }
             },
-            _  => {
+            ref status @ _  => {
                 let status_text = match build.status_text {
                     None => "".to_owned(),
                     Some(ref build_state) => build_state.to_owned()
                 };
                 let comment = make_failure_comment(&build.web_url, &pr.from_commit, &status_text);
                 match repo.post_comment(pr.id, &comment) {
-                    Ok(comment) => Ok(comment),
+                    Ok(_) => Ok((BuildState::Finished, status.to_owned())),
                     Err(err) => {
                         println!("{}Error submitting comment: {}", tabs(2), err);
                         Err(err)
@@ -287,8 +287,8 @@ fn check_build_status(pr: &PullRequest, build: &BuildDetails, repo: &Repository)
                 }
             }
         },
-        _ => {
-            Err("Build is still running".to_owned())
+        ref state @ _ => {
+            Ok((state.to_owned(), build.status.to_owned()))
         }
     }
 }
@@ -298,7 +298,7 @@ mod tests {
     use super::{bitbucket, teamcity, Config, PullRequest, ContinuousIntegrator, Build};
     use super::{BuildDetails, BuildStatus, BuildState, Repository, Comment};
     use super::{read_config, parse_config, tabs, get_latest_build, schedule_build};
-    use super::{make_queued_comment, make_success_comment, make_failure_comment, check_build_status};
+    use super::{make_queued_comment, check_build_status};
     use std::fs::File;
     use std::io::{Read, Cursor};
 
@@ -563,39 +563,35 @@ mod tests {
     }
 
     #[test]
-    fn check_build_status_returns_success_comment_on_build_success() {
+    fn check_build_status_returns_correct_state_and_status_on_build_success() {
         let build = build_success();
-        let expected_comment = comment(&make_success_comment(&build.web_url, &build.commit.clone().unwrap()));
-
+        let comment = comment("this does not matter");
         let stub_repo = StubRepository {
             pr_list: Err("This does not matter".to_owned()),
             get_comments: Ok(vec![]),
-            post_comment: Ok(expected_comment.to_owned())
+            post_comment: Ok(comment.to_owned())
         };
 
-        let actual = check_build_status(&pull_request(), &build, &stub_repo).unwrap();
-        assert_eq!(expected_comment, actual);
+        let actual = check_build_status(&pull_request(), &build, &stub_repo);
+        assert_eq!(Ok((BuildState::Finished, BuildStatus::Success)), actual);
     }
 
     #[test]
-    fn check_build_status_returns_failure_comment_on_build_failure() {
+    fn check_build_status_returns_correct_state_and_status_on_build_failure() {
         let build = build_failure();
-        let expected_comment = comment(&make_failure_comment(&build.web_url,
-                                                             &build.commit.clone().unwrap(),
-                                                             &build.status_text.clone().unwrap()));
-
+        let comment = comment("this does not matter");
         let stub_repo = StubRepository {
             pr_list: Err("This does not matter".to_owned()),
             get_comments: Ok(vec![]),
-            post_comment: Ok(expected_comment.to_owned())
+            post_comment: Ok(comment.to_owned())
         };
 
-        let actual = check_build_status(&pull_request(), &build, &stub_repo).unwrap();
-        assert_eq!(expected_comment, actual);
+        let actual = check_build_status(&pull_request(), &build, &stub_repo);
+        assert_eq!(Ok((BuildState::Finished, BuildStatus::Failure)), actual);
     }
 
     #[test]
-    fn check_build_status_returns_an_err_for_queued_builds() {
+    fn check_build_status_returns_correct_state_and_status_for_queued_builds() {
         let build = build_queuing();
 
         let stub_repo = StubRepository {
@@ -605,11 +601,11 @@ mod tests {
         };
 
         let actual = check_build_status(&pull_request(), &build, &stub_repo);
-        assert_eq!(Err("Build is still running".to_owned()), actual);
+        assert_eq!(Ok((BuildState::Queued, BuildStatus::Unknown)), actual);
     }
 
     #[test]
-    fn check_build_status_returns_an_err_for_running_builds() {
+    fn check_build_status_returns_correct_state_and_status_for_running_builds() {
         let build = build_running();
 
         let stub_repo = StubRepository {
@@ -619,6 +615,6 @@ mod tests {
         };
 
         let actual = check_build_status(&pull_request(), &build, &stub_repo);
-        assert_eq!(Err("Build is still running".to_owned()), actual);
+        assert_eq!(Ok((BuildState::Running, BuildStatus::Success)), actual);
     }
 }
