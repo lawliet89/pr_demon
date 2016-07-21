@@ -75,6 +75,7 @@ pub enum BuildStatus {
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct BuildDetails {
     pub id: i32,
+    pub build_id: String,
     pub web_url: String,
     pub commit: Option<String>,
     pub state: BuildState,
@@ -345,6 +346,7 @@ mod tests {
     fn build_success() -> BuildDetails {
         BuildDetails {
             id: 213232321,
+            build_id: "somethingsomething",
             web_url: "http://www.goodbuilds.com/213213221".to_owned(),
             commit: Some("363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned()),
             state: BuildState::Finished,
@@ -356,6 +358,7 @@ mod tests {
     fn build_queuing() -> BuildDetails {
         BuildDetails {
             id: 213232321,
+            build_id: "somethingsomething",
             web_url: "http://www.goodbuilds.com/1111".to_owned(),
             commit: Some("363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned()),
             state: BuildState::Queued,
@@ -367,6 +370,7 @@ mod tests {
     fn build_running() -> BuildDetails {
         BuildDetails {
             id: 213232321,
+            build_id: "somethingsomething",
             web_url: "http://www.goodbuilds.com/1111".to_owned(),
             commit: Some("363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned()),
             state: BuildState::Running,
@@ -379,6 +383,7 @@ mod tests {
     fn build_failure() -> BuildDetails {
         BuildDetails {
             id: 213232321,
+            build_id: "somethingsomething",
             web_url: "http://www.goodbuilds.com/213213221".to_owned(),
             commit: Some("363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned()),
             state: BuildState::Finished,

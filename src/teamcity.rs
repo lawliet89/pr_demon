@@ -119,6 +119,7 @@ impl Build {
         };
         ::BuildDetails {
             id: self.id,
+            build_id: self.buildTypeId.to_owned(),
             web_url: self.webUrl.to_owned(),
             commit: commit,
             state: self.state.clone().to_build_state(),

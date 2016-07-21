@@ -3,6 +3,7 @@ use rustc_serialize;
 use rustc_serialize::json;
 use hyper;
 use hyper::client::Client;
+use hyper::client::response::Response;
 use hyper::header::{Authorization, Basic, Accept, qitem, ContentType};
 use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 
@@ -83,11 +84,7 @@ pub fn get<T>(url: &str, headers: &hyper::header::Headers) -> Result<T, String>
 
 pub fn post<T>(url: &str, body: &str, headers: &hyper::header::Headers, status_code: &hyper::status::StatusCode)
          -> Result<T, String> where T: rustc_serialize::Decodable {
-    let client = Client::new();
-    let mut response = match client
-            .post(url)
-            .body(body)
-            .headers(headers.to_owned()).send() {
+    let mut response = match post_raw(&url, &body, &headers) {
         Ok(response) => response,
         Err(err) => return Err(err.to_string())
     };
@@ -106,4 +103,12 @@ pub fn post<T>(url: &str, body: &str, headers: &hyper::header::Headers, status_c
         Ok(decoded) => Ok(decoded),
         Err(err) => Err(format!("Error parsing response: {} {}", json_string, err))
     }
+}
+
+pub fn post_raw(url: &str, body: &str, headers: &hyper::header::Headers)
+        -> Result<hyper::client::response::Response, hyper::Error> {
+    let client = Client::new();
+    client.post(url)
+        .body(body)
+        .headers(headers.to_owned()).send()
 }

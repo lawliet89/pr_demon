@@ -8,114 +8,131 @@ use rustc_serialize::json;
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
-pub struct PagedApi<T> {
-    pub size: i32,
-    pub limit: i32,
-    pub isLastPage: bool,
-    pub values: Vec<T>,
-    pub start: i32
+struct PagedApi<T> {
+    size: i32,
+    limit: i32,
+    isLastPage: bool,
+    values: Vec<T>,
+    start: i32
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
-pub struct PullRequest {
-    pub id: i32,
-    pub version: i32,
-    pub title: String,
-    pub description: Option<String>,
-    pub state: String,
-    pub open:  bool,
-    pub closed: bool,
-    pub createdDate: i64,
-    pub updatedDate: i64,
-    pub fromRef: GitReference,
-    pub toRef: GitReference,
-    pub locked: bool,
-    pub author: PullRequestParticipant,
-    pub reviewers: Vec<PullRequestParticipant>,
-    pub participants: Vec<PullRequestParticipant>,
-    pub links: BTreeMap<String, Vec<Link>>
+struct PullRequest {
+    id: i32,
+    version: i32,
+    title: String,
+    description: Option<String>,
+    state: String,
+    open:  bool,
+    closed: bool,
+    createdDate: i64,
+    updatedDate: i64,
+    fromRef: GitReference,
+    toRef: GitReference,
+    locked: bool,
+    author: PullRequestParticipant,
+    reviewers: Vec<PullRequestParticipant>,
+    participants: Vec<PullRequestParticipant>,
+    links: BTreeMap<String, Vec<Link>>
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
-pub struct Comment {
-    pub id: i32,
-    pub version: i32,
-    pub text: String,
-    pub author: User,
-    pub createdDate: i64,
-    pub updatedDate: i64
+struct Comment {
+    id: i32,
+    version: i32,
+    text: String,
+    author: User,
+    createdDate: i64,
+    updatedDate: i64
 }
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
-pub struct CommentSubmit {
-    pub text: String
+struct CommentSubmit {
+    text: String
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
-pub struct GitReference {
-    pub id: String,
-    pub repository: Repository,
-    pub displayId: String,
-    pub latestCommit: String
+struct GitReference {
+    id: String,
+    repository: Repository,
+    displayId: String,
+    latestCommit: String
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
-pub struct Repository {
-    pub slug: String,
-    pub name: Option<String>,
-    pub project: Project,
-    pub public: bool,
-    pub links: BTreeMap<String, Vec<Link>>
+struct Repository {
+    slug: String,
+    name: Option<String>,
+    project: Project,
+    public: bool,
+    links: BTreeMap<String, Vec<Link>>
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
-pub struct Project {
-    pub key: String,
-    pub id: i32,
-    pub name: String,
-    pub description: String,
-    pub public: bool,
-    pub links: BTreeMap<String, Vec<Link>>
+struct Project {
+    key: String,
+    id: i32,
+    name: String,
+    description: String,
+    public: bool,
+    links: BTreeMap<String, Vec<Link>>
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
-pub struct PullRequestParticipant {
-    pub user: User,
-    pub role: String,
-    pub approved: bool
+struct PullRequestParticipant {
+    user: User,
+    role: String,
+    approved: bool
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
-pub struct User {
-    pub name: String,
-    pub emailAddress: String,
-    pub id: i32,
-    pub displayName: String,
-    pub active: bool,
-    pub slug: String,
-    pub links: BTreeMap<String, Vec<Link>>
+struct User {
+    name: String,
+    emailAddress: String,
+    id: i32,
+    displayName: String,
+    active: bool,
+    slug: String,
+    links: BTreeMap<String, Vec<Link>>
     // type: String
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
-pub struct Link {
-    pub href: String,
-    pub name: Option<String>
+struct Link {
+    href: String,
+    name: Option<String>
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
-pub struct Activity {
-    pub id: i32,
-    pub createdDate: i64,
-    pub user: User,
-    pub action: String,
-    pub commentAction: Option<String>,
-    pub comment: Option<Comment>
+struct Activity {
+    id: i32,
+    createdDate: i64,
+    user: User,
+    action: String,
+    commentAction: Option<String>,
+    comment: Option<Comment>
+}
+
+#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+struct Build {
+    state: BuildState,
+    key: String,
+    name: String,
+    url: String,
+    description: String
+}
+
+#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+#[allow(non_camel_case_types)]
+enum BuildState{
+    INPROGRESS,
+    FAILED,
+    SUCCESSFUL
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
@@ -152,7 +169,7 @@ impl ::Repository for BitbucketCredentials {
         let mut headers = rest::Headers::new();
         headers.add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header();
-        let url = format!("{}/projects/{}/repos/{}/pull-requests",
+        let url = format!("{}/api/latest/projects/{}/repos/{}/pull-requests",
             self.base_url, self.project_slug, self.repo_slug);
 
         match rest::get::<PagedApi<PullRequest>>(&url, &headers.headers) {
@@ -173,16 +190,25 @@ impl ::Repository for BitbucketCredentials {
     fn build_queued(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
         let comment = ::make_queued_comment(&build.web_url, &pr.from_commit);
         match self.post_comment(pr.id, &comment) {
+            Ok(_) => {},
+            Err(err) => return Err(format!("Error submitting comment: {}", err))
+        };
+        match self.post_build(&build) {
             Ok(_) => Ok(()),
-            Err(err) =>  Err(format!("Error submitting comment: {}", err))
+            Err(err) => return Err(format!("Error posting build: {}", err))
         }
     }
 
     fn build_success(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
         let comment = ::make_success_comment(&build.web_url, &pr.from_commit);
         match self.post_comment(pr.id, &comment) {
+            Ok(_) => {},
+            Err(err) => return Err(format!("Error submitting comment: {}", err))
+        };
+
+        match self.post_build(&build) {
             Ok(_) => Ok(()),
-            Err(err) => Err(format!("Error submitting comment: {}", err))
+            Err(err) => Err(format!("Error posting build: {}", err))
         }
     }
 
@@ -193,8 +219,12 @@ impl ::Repository for BitbucketCredentials {
         };
         let comment = ::make_failure_comment(&build.web_url, &pr.from_commit, &status_text);
         match self.post_comment(pr.id, &comment) {
+            Ok(_) => {},
+            Err(err) => return Err(format!("Error submitting comment: {}", err))
+        };
+        match self.post_build(&build) {
             Ok(_) => Ok(()),
-            Err(err) => Err(format!("Error submitting comment: {}", err))
+            Err(err) => Err(format!("Error posting build: {}", err))
         }
     }
 }
@@ -204,7 +234,7 @@ impl BitbucketCredentials {
         let mut headers = rest::Headers::new();
         headers.add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header();
-        let url = format!("{}/projects/{}/repos/{}/pull-requests/{}/activities?fromType=COMMENT",
+        let url = format!("{}/api/latest/projects/{}/repos/{}/pull-requests/{}/activities?fromType=COMMENT",
                 self.base_url, self.project_slug, self.repo_slug, pr_id);
 
         match rest::get::<PagedApi<Activity>>(&url, &headers.headers) {
@@ -246,7 +276,7 @@ impl BitbucketCredentials {
         let body = json::encode(&CommentSubmit {
             text: text.to_owned()
         }).unwrap();
-        let url = format!("{}/projects/{}/repos/{}/pull-requests/{}/comments",
+        let url = format!("{}/api/latest/projects/{}/repos/{}/pull-requests/{}/comments",
                 self.base_url, self.project_slug, self.repo_slug, pr_id);
 
         match rest::post::<Comment>(&url, &body, &headers.headers, &hyper::status::StatusCode::Created) {
@@ -259,6 +289,53 @@ impl BitbucketCredentials {
                 )
             },
             Err(err) =>  Err(format!("Error posting comment {}", err))
+        }
+    }
+
+
+    fn post_build(&self, build: &::BuildDetails) -> Result<Build, String> {
+        let build_status = match build.state {
+            ::BuildState::Finished => {
+                match build.status {
+                    ::BuildStatus::Success => BuildState::SUCCESSFUL,
+                    _ => BuildState::INPROGRESS
+                }
+            },
+            _ => BuildState::INPROGRESS
+        };
+
+        let description = match build.status_text {
+            None => "".to_owned(),
+            Some(ref text) => text.to_owned()
+        };
+
+        let bitbucket_build = Build {
+            state: build_status.to_owned(),
+            key: build.build_id.to_owned(),
+            name: build.id.to_string(),
+            url: build.web_url.to_owned(),
+            description: description.to_owned()
+        };
+
+        let commit = build.commit.clone().unwrap();
+
+        let mut headers = rest::Headers::new();
+        headers.add_authorization_header(self as &::UsernameAndPassword)
+            .add_accept_json_header()
+            .add_content_type_json_header();
+
+        let body = json::encode(&bitbucket_build).unwrap();
+        let url = format!("{}/build-status/1.0/commits/{}",
+                self.base_url, commit);
+
+        match rest::post_raw(&url, &body, &headers.headers) {
+            Ok(response) => {
+                match response.status {
+                    ref status if status == &hyper::status::StatusCode::NoContent => Ok(bitbucket_build),
+                    e @ _ => Err(e.to_string())
+                }
+            },
+            Err(err) =>  Err(format!("Error posting build {}", err))
         }
     }
 }
