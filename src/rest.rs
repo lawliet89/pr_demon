@@ -111,3 +111,27 @@ pub fn post_raw(url: &str, body: &str, headers: &hyper::header::Headers)
         .body(body)
         .headers(headers.to_owned()).send()
 }
+
+pub fn put<T>(url: &str, body: &str, headers: &hyper::header::Headers, status_code: &hyper::status::StatusCode)
+         -> Result<T, String> where T: rustc_serialize::Decodable {
+    let client = Client::new();
+    let mut response = match client.put(url).body(body).headers(headers.to_owned()).send() {
+        Ok(response) => response,
+        Err(err) => return Err(err.to_string())
+    };
+
+    match response.status {
+        ref status if status == status_code => (),
+        e @ _ => return Err(e.to_string())
+    };
+
+    let mut json_string = String::new();
+    if let Err(err) = response.read_to_string(&mut json_string) {
+        return Err(err.to_string())
+    }
+
+    match json::decode(&json_string) {
+        Ok(decoded) => Ok(decoded),
+        Err(err) => Err(format!("Error parsing response: {} {}", json_string, err))
+    }
+}

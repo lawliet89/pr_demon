@@ -53,6 +53,12 @@ struct CommentSubmit {
     text: String
 }
 
+#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+struct CommentEdit {
+    text: String,
+    version: i32
+}
+
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
 struct GitReference {
@@ -144,16 +150,6 @@ pub struct BitbucketCredentials {
     pub repo_slug: String
 }
 
-impl BitbucketCredentials {
-    fn matching_comments(comments: &Vec<::Comment>, text: &str) -> Option<::Comment> {
-        let found_comment = comments.iter().find(|&comment| comment.text == text);
-        match found_comment {
-            Some(comment) => Some(comment.clone().to_owned()),
-            None => None
-        }
-    }
-}
-
 impl ::UsernameAndPassword for BitbucketCredentials {
     fn username(&self) -> &String {
         &self.username
@@ -188,8 +184,7 @@ impl ::Repository for BitbucketCredentials {
     }
 
     fn build_queued(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
-        let comment = ::make_queued_comment(&build.web_url, &pr.from_commit);
-        match self.post_comment(pr.id, &comment) {
+        match self.update_pr_build_status_comment(&pr, &build, &BuildState::INPROGRESS) {
             Ok(_) => {},
             Err(err) => return Err(format!("Error submitting comment: {}", err))
         };
@@ -204,12 +199,10 @@ impl ::Repository for BitbucketCredentials {
     }
 
     fn build_success(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
-        let comment = ::make_success_comment(&build.web_url, &pr.from_commit);
-        match self.post_comment(pr.id, &comment) {
+        match self.update_pr_build_status_comment(&pr, &build, &BuildState::SUCCESSFUL) {
             Ok(_) => {},
             Err(err) => return Err(format!("Error submitting comment: {}", err))
         };
-
         match self.post_build(&build, &pr) {
             Ok(_) => Ok(()),
             Err(err) => Err(format!("Error posting build: {}", err))
@@ -217,12 +210,7 @@ impl ::Repository for BitbucketCredentials {
     }
 
     fn build_failure(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
-        let status_text = match build.status_text {
-            None => "".to_owned(),
-            Some(ref build_state) => build_state.to_owned()
-        };
-        let comment = ::make_failure_comment(&build.web_url, &pr.from_commit, &status_text);
-        match self.post_comment(pr.id, &comment) {
+        match self.update_pr_build_status_comment(&pr, &build, &BuildState::FAILED) {
             Ok(_) => {},
             Err(err) => return Err(format!("Error submitting comment: {}", err))
         };
@@ -234,7 +222,54 @@ impl ::Repository for BitbucketCredentials {
 }
 
 impl BitbucketCredentials {
-    fn get_comments(&self, pr_id: i32) -> Result<Vec<::Comment>, String> {
+    fn matching_comments(comments: &Vec<Comment>, text: &str) -> Option<Comment> {
+        let found_comment = comments.iter().find(|&comment| comment.text == text);
+        match found_comment {
+            Some(comment) => Some(comment.clone().to_owned()),
+            None => None
+        }
+    }
+
+    fn matching_comments_substring(comments: &Vec<Comment>, substr: &str) -> Option<Comment> {
+        let found_comment = comments.iter().find(|&comment| comment.text.as_str().contains(substr));
+        match found_comment {
+            Some(comment) => Some(comment.clone().to_owned()),
+            None => None
+        }
+    }
+
+    fn update_pr_build_status_comment(&self, pr: &::PullRequest, build: &::BuildDetails, state: &BuildState)
+            -> Result<Comment, String> {
+        let text = match *state {
+            BuildState::INPROGRESS => ::make_queued_comment(&build.web_url, &pr.from_commit),
+            BuildState::FAILED => {
+                let status_text = match build.status_text {
+                    None => "".to_owned(),
+                    Some(ref text) => text.to_owned()
+                };
+                ::make_failure_comment(&build.web_url, &pr.from_commit, &status_text)
+            },
+            BuildState::SUCCESSFUL => ::make_success_comment(&build.web_url, &pr.from_commit)
+        };
+
+        match self.get_comments(pr.id) {
+            Ok(ref comments) => {
+                match BitbucketCredentials::matching_comments(&comments, &text) {
+                    Some(comment) => Ok(comment),
+                    None => {
+                        // Have to post or edit comment
+                        match BitbucketCredentials::matching_comments_substring(&comments, &pr.from_commit) {
+                            Some(comment) => self.edit_comment(pr.id, &comment, &text),
+                            None => self.post_comment(pr.id, &text)
+                        }
+                    }
+                }
+            },
+            Err(err) => Err(format!("Error getting list of comments {}", err))
+        }
+    }
+
+    fn get_comments(&self, pr_id: i32) -> Result<Vec<Comment>, String> {
         let mut headers = rest::Headers::new();
         headers.add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header();
@@ -246,13 +281,10 @@ impl BitbucketCredentials {
                 Ok(
                     activities.values.iter()
                         .filter(|&activity| activity.comment.is_some())
+                        .filter(|&activity| activity.user.name == self.username)
                         .map(|ref activity| {
                             // won't panic because of filter above
-                            let comment = activity.comment.as_ref().unwrap();
-                            ::Comment {
-                                id: comment.id,
-                                text: comment.text.to_owned()
-                            }
+                            activity.comment.as_ref().unwrap().to_owned()
                         })
                         .collect()
                 )
@@ -261,17 +293,7 @@ impl BitbucketCredentials {
         }
     }
 
-    fn post_comment(&self, pr_id: i32, text: &str) -> Result<::Comment, String> {
-        match self.get_comments(pr_id) {
-            Ok(ref comments) => {
-                match BitbucketCredentials::matching_comments(&comments, &text) {
-                    Some(comment) => return Ok(comment),
-                    None => {}
-                }
-            },
-            Err(err) => { println!("Error getting list of comments {}", err); }
-        };
-
+    fn post_comment(&self, pr_id: i32, text: &str) -> Result<Comment, String> {
         let mut headers = rest::Headers::new();
         headers.add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header()
@@ -284,14 +306,26 @@ impl BitbucketCredentials {
                 self.base_url, self.project_slug, self.repo_slug, pr_id);
 
         match rest::post::<Comment>(&url, &body, &headers.headers, &hyper::status::StatusCode::Created) {
-            Ok(comment) => {
-                Ok(
-                    ::Comment {
-                        id: comment.id,
-                        text: comment.text.to_owned()
-                    }
-                )
-            },
+            Ok(comment) => Ok(comment.to_owned()),
+            Err(err) =>  Err(format!("Error posting comment {}", err))
+        }
+    }
+
+    fn edit_comment(&self, pr_id: i32, comment: &Comment, text: &str) -> Result<Comment, String> {
+        let mut headers = rest::Headers::new();
+        headers.add_authorization_header(self as &::UsernameAndPassword)
+            .add_accept_json_header()
+            .add_content_type_json_header();
+
+        let body = json::encode(&CommentEdit {
+            text: text.to_owned(),
+            version: comment.version
+        }).unwrap();
+        let url = format!("{}/api/latest/projects/{}/repos/{}/pull-requests/{}/comments/{}",
+                self.base_url, self.project_slug, self.repo_slug, pr_id, comment.id);
+
+        match rest::put::<Comment>(&url, &body, &headers.headers, &hyper::status::StatusCode::Created) {
+            Ok(comment) => Ok(comment.to_owned()),
             Err(err) =>  Err(format!("Error posting comment {}", err))
         }
     }
@@ -342,34 +376,5 @@ impl BitbucketCredentials {
             url: build.web_url.to_owned(),
             description: description.to_owned()
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::BitbucketCredentials;
-    use super::super::Comment;
-
-    #[test]
-    fn matching_comments_returns_matching_comment_text() {
-        let expected_text = "Foo Bar Baz";
-        let expected_comment = Comment {
-            id: 1,
-            text: expected_text.to_owned()
-        };
-
-        let comments = vec![expected_comment.clone(),
-            Comment {
-                id: 2,
-                text: "Fizz buzz".to_owned()
-            },
-            Comment {
-                id: 3,
-                text: "Lorem Ipsum".to_owned()
-            }
-        ];
-
-        let actual = BitbucketCredentials::matching_comments(&comments, &expected_text);
-        assert_eq!(Some(expected_comment), actual);
     }
 }
