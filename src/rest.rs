@@ -59,63 +59,46 @@ impl Headers {
 
 pub fn get<T>(url: &str, headers: &hyper::header::Headers) -> Result<T, String>
     where T: rustc_serialize::Decodable {
-    let client = Client::new();
-    let mut response = match client.get(url).headers(headers.to_owned()).send() {
-        Ok(response) => response,
-        Err(err) => return Err(err.to_string())
-    };
-
-    match response.status {
-        hyper::status::StatusCode::Ok => (),
-        e @ _ => return Err(e.to_string())
-    };
-
-    let mut json_string = String::new();
-    if let Err(err) = response.read_to_string(&mut json_string) {
-        return Err(format!("Unable to get a list of Builds: {}", err))
-    }
-
-    match json::decode(&json_string) {
-        Ok(decoded) => Ok(decoded),
-        Err(err) =>  Err(format!("Error parsing response: {} {}", json_string, err))
-    }
+    request(url, hyper::method::Method::Get, &None, headers, &hyper::status::StatusCode::Ok)
 }
 
 pub fn post<T>(url: &str, body: &str, headers: &hyper::header::Headers, status_code: &hyper::status::StatusCode)
          -> Result<T, String> where T: rustc_serialize::Decodable {
-    let mut response = match post_raw(&url, &body, &headers) {
-        Ok(response) => response,
-        Err(err) => return Err(err.to_string())
-    };
-
-    match response.status {
-        ref status if status == status_code => (),
-        e @ _ => return Err(e.to_string())
-    };
-
-    let mut json_string = String::new();
-    if let Err(err) = response.read_to_string(&mut json_string) {
-        return Err(err.to_string())
-    }
-
-    match json::decode(&json_string) {
-        Ok(decoded) => Ok(decoded),
-        Err(err) => Err(format!("Error parsing response: {} {}", json_string, err))
-    }
+    request(url, hyper::method::Method::Post, &Some(body.to_owned()), headers, status_code)
 }
 
 pub fn post_raw(url: &str, body: &str, headers: &hyper::header::Headers)
         -> Result<hyper::client::response::Response, hyper::Error> {
-    let client = Client::new();
-    client.post(url)
-        .body(body)
-        .headers(headers.to_owned()).send()
+    request_raw(url, hyper::method::Method::Post, &Some(body.to_owned()), headers)
 }
 
 pub fn put<T>(url: &str, body: &str, headers: &hyper::header::Headers, status_code: &hyper::status::StatusCode)
          -> Result<T, String> where T: rustc_serialize::Decodable {
+    request(url, hyper::method::Method::Put, &Some(body.to_owned()), headers, status_code)
+}
+
+fn request_raw(url: &str,
+               method: hyper::method::Method,
+               body: &Option<String>,
+               headers: &hyper::header::Headers) -> Result<hyper::client::response::Response, hyper::Error> {
     let client = Client::new();
-    let mut response = match client.put(url).body(body).headers(headers.to_owned()).send() {
+    let client = client.request(method, url);
+    let client = match *body {
+        Some(ref body_content) => client.body(body_content),
+        None => client
+    };
+
+    client.headers(headers.to_owned())
+        .send()
+}
+
+fn request<T>(url: &str,
+              method: hyper::method::Method,
+              body: &Option<String>,
+              headers: &hyper::header::Headers,
+              status_code: &hyper::status::StatusCode)
+                    -> Result<T, String> where T: rustc_serialize::Decodable {
+    let mut response = match request_raw(url, method, body, headers) {
         Ok(response) => response,
         Err(err) => return Err(err.to_string())
     };
