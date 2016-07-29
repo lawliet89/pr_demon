@@ -324,7 +324,7 @@ impl BitbucketCredentials {
         let url = format!("{}/api/latest/projects/{}/repos/{}/pull-requests/{}/comments/{}",
                 self.base_url, self.project_slug, self.repo_slug, pr_id, comment.id);
 
-        match rest::put::<Comment>(&url, &body, &headers.headers, &hyper::status::StatusCode::Created) {
+        match rest::put::<Comment>(&url, &body, &headers.headers, &hyper::status::StatusCode::Ok) {
             Ok(comment) => Ok(comment.to_owned()),
             Err(err) =>  Err(format!("Error posting comment {}", err))
         }
