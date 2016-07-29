@@ -4,6 +4,7 @@ extern crate url;
 extern crate time;
 
 mod rest;
+mod fanout;
 mod bitbucket;
 mod teamcity;
 
