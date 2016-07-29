@@ -189,7 +189,7 @@ pub struct TestOccurences {
     pub count: i32,
     pub href: String,
     pub passed: i32,
-    pub ignored: i32,
+    pub ignored: Option<i32>,
     pub default: bool
 }
 
