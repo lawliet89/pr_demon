@@ -178,10 +178,8 @@ pub struct Revision {
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
 pub struct Agent {
-    pub id: i32,
     pub name: String,
-    pub typeId: i32,
-    pub href: String
+    pub typeId: i32
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
