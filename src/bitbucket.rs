@@ -147,7 +147,8 @@ pub struct BitbucketCredentials {
     pub password: String,
     pub base_url: String,
     pub project_slug: String,
-    pub repo_slug: String
+    pub repo_slug: String,
+    pub post_build: bool
 }
 
 impl ::UsernameAndPassword for BitbucketCredentials {
@@ -188,10 +189,16 @@ impl ::Repository for BitbucketCredentials {
             Ok(_) => {},
             Err(err) => return Err(format!("Error submitting comment: {}", err))
         };
-        match self.post_build(&build, &pr) {
-            Ok(_) => Ok(()),
-            Err(err) => return Err(format!("Error posting build: {}", err))
+        match self.post_build {
+            true => {
+                match self.post_build(&build, &pr) {
+                    Ok(_) => Ok(()),
+                    Err(err) => return Err(format!("Error posting build: {}", err))
+                }
+            },
+            false => Ok(())
         }
+
     }
 
     fn build_running(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String>  {
@@ -203,9 +210,14 @@ impl ::Repository for BitbucketCredentials {
             Ok(_) => {},
             Err(err) => return Err(format!("Error submitting comment: {}", err))
         };
-        match self.post_build(&build, &pr) {
-            Ok(_) => Ok(()),
-            Err(err) => Err(format!("Error posting build: {}", err))
+        match self.post_build {
+            true => {
+                match self.post_build(&build, &pr) {
+                    Ok(_) => Ok(()),
+                    Err(err) => Err(format!("Error posting build: {}", err))
+                }
+            },
+            false => Ok(())
         }
     }
 
@@ -214,9 +226,14 @@ impl ::Repository for BitbucketCredentials {
             Ok(_) => {},
             Err(err) => return Err(format!("Error submitting comment: {}", err))
         };
-        match self.post_build(&build, &pr) {
-            Ok(_) => Ok(()),
-            Err(err) => Err(format!("Error posting build: {}", err))
+        match self.post_build {
+            true => {
+                match self.post_build(&build, &pr) {
+                    Ok(_) => Ok(()),
+                    Err(err) => Err(format!("Error posting build: {}", err))
+                }
+            },
+            false => Ok(())
         }
     }
 }

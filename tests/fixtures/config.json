@@ -10,7 +10,8 @@
     "password": "password",
     "base_url": "https://www.example.com/bb/rest/api/latest",
     "project_slug": "foo",
-    "repo_slug": "bar"
+    "repo_slug": "bar",
+    "post_build": false
   },
   "run_interval": 999
 }
