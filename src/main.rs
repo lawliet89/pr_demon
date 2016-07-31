@@ -434,7 +434,8 @@ mod tests {
                 password: "password".to_owned(),
                 base_url: "https://www.example.com/bb/rest/api/latest".to_owned(),
                 project_slug: "foo".to_owned(),
-                repo_slug: "bar".to_owned()
+                repo_slug: "bar".to_owned(),
+                post_build: false
             },
             teamcity: teamcity::TeamcityCredentials {
                 username: "username".to_owned(),
