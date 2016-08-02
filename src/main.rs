@@ -1,6 +1,7 @@
 extern crate hyper;
 extern crate rustc_serialize;
 extern crate url;
+extern crate time;
 
 mod rest;
 mod bitbucket;
@@ -110,26 +111,26 @@ fn main() {
     loop {
         let pull_requests = match config.bitbucket.get_pr_list() {
             Err(err) => {
-                println!("Error getting Pull Requests: {}", err);
+                println!("{}Error getting Pull Requests: {}", prefix(0), err);
                 continue;
             },
             Ok(x) => x
         };
 
-        println!("{} Open Pull Requests Found", pull_requests.len());
+        println!("{}{} Open Pull Requests Found", prefix(0), pull_requests.len());
 
         for pr in &pull_requests {
-            println!("{}Pull Request #{} ({})", tabs(1), pr.id, pr.web_url);
+            println!("{}Pull Request #{} ({})", prefix(1), pr.id, pr.web_url);
             match get_latest_build(&pr, &config.teamcity) {
                 None => {
                     match schedule_build(&pr, &config.teamcity, &config.bitbucket) {
-                        Err(err) => println!("{}{}", tabs(2), err),
+                        Err(err) => println!("{}{}", prefix(2), err),
                         Ok(_) => {}
                     }
                 },
                 Some(build) =>  {
                     match check_build_status(&pr, &build, &config.bitbucket) {
-                        Err(err) => println!("{}{}", tabs(2), err),
+                        Err(err) => println!("{}{}", prefix(2), err),
                         Ok(_) => {}
                     }
                 }
@@ -139,9 +140,13 @@ fn main() {
     }
 }
 
-fn tabs(x: usize) -> String {
+fn format_time() -> String {
+    time::strftime("%Y-%m-%d %T %z", &time::now()).unwrap()
+}
+
+fn prefix(x: usize) -> String {
     // https://stackoverflow.com/questions/31216646/repeat-string-with-integer-multiplication
-    iter::repeat("    ").take(x).collect()
+    format!("{}[{}] ", iter::repeat("    ").take(x).collect::<String>(), format_time())
 }
 
 fn read_config<R>(path: &str, reader: R) -> Result<String, String>
@@ -188,31 +193,31 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
     let branch_name = pr.branch_name();
     let pr_commit = &pr.from_commit;
 
-    println!("{}Branch: {}", tabs(2), branch_name);
-    println!("{}Commit: {}", tabs(2), pr_commit);
-    println!("{}Finding latest build from branch", tabs(2));
+    println!("{}Branch: {}", prefix(2), branch_name);
+    println!("{}Commit: {}", prefix(2), pr_commit);
+    println!("{}Finding latest build from branch", prefix(2));
 
     let latest_build = match ci.get_build_list(&branch_name) {
         Ok(ref build_list) => {
             if build_list.is_empty() {
-                println!("{}Build does not exist -- running build", tabs(2));
+                println!("{}Build does not exist -- running build", prefix(2));
                 None
             } else {
                 let latest_build_id = build_list.first().unwrap().id;
                 match ci.get_build(latest_build_id) {
                     Ok(build) =>  {
-                        println!("{}Latest Build Found {}", tabs(2), build.web_url);
+                        println!("{}Latest Build Found {}", prefix(2), build.web_url);
                         Some(build)
                     },
                     Err(err) => {
-                        println!("{}Unable to retrieve information for build ID {}: {}", tabs(2), latest_build_id, err);
+                        println!("{}Unable to retrieve information for build ID {}: {}", prefix(2), latest_build_id, err);
                         None
                     }
                 }
             }
         },
         Err(err) => {
-            println!("{}Error fetching builds -- queuing anyway: {}", tabs(2), err);
+            println!("{}Error fetching builds -- queuing anyway: {}", prefix(2), err);
             None
         }
     };
@@ -223,19 +228,19 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
             match build.commit {
                 Some(ref commit) => {
                     if commit == pr_commit {
-                        println!("{}Commit matches -- skipping", tabs(2));
+                        println!("{}Commit matches -- skipping", prefix(2));
                         Some(build.to_owned())
                     } else {
-                        println!("{}Commit does not match with {} -- scheduling build", tabs(2), commit);
+                        println!("{}Commit does not match with {} -- scheduling build", prefix(2), commit);
                         None
                     }
                 },
                 None if build.state == BuildState::Queued => {
-                    println!("{}Build is queued -- skipping", tabs(2));
+                    println!("{}Build is queued -- skipping", prefix(2));
                     Some(build.to_owned())
                 },
                 _ => {
-                    println!("{}Unknown error -- scheduling build", tabs(2));
+                    println!("{}Unknown error -- scheduling build", prefix(2));
                     None
                 }
             }
@@ -245,15 +250,15 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
 
 fn schedule_build(pr: &PullRequest, ci: &ContinuousIntegrator, repo: &Repository)
     -> Result<BuildDetails, String> {
-    println!("{}Scheduling build", tabs(2));
+    println!("{}Scheduling build", prefix(2));
     let queued_build = ci.queue_build(&pr.branch_name());
     match queued_build {
         Err(err) => {
-            println!("{}Error queuing build: {}", tabs(2), err);
+            println!("{}Error queuing build: {}", prefix(2), err);
             return Err(err)
         },
         Ok(queued) => {
-            println!("{}Build Queued: {}", tabs(2), queued.web_url);
+            println!("{}Build Queued: {}", prefix(2), queued.web_url);
             match repo.build_queued(&pr, &queued) {
                 Ok(_) => Ok(queued),
                 Err(err) => Err(err)
@@ -264,7 +269,7 @@ fn schedule_build(pr: &PullRequest, ci: &ContinuousIntegrator, repo: &Repository
 
 fn check_build_status(pr: &PullRequest, build: &BuildDetails, repo: &Repository)
     -> Result<(BuildState, BuildStatus), String> {
-    println!("{}Build exists: {}", tabs(2), build.web_url);
+    println!("{}Build exists: {}", prefix(2), build.web_url);
     match build.state {
         BuildState::Finished => match build.status {
             BuildStatus::Success => {
@@ -299,7 +304,7 @@ fn check_build_status(pr: &PullRequest, build: &BuildDetails, repo: &Repository)
 mod tests {
     use super::{bitbucket, teamcity, Config, PullRequest, ContinuousIntegrator, Build};
     use super::{BuildDetails, BuildStatus, BuildState, Repository};
-    use super::{read_config, parse_config, tabs, get_latest_build, schedule_build};
+    use super::{read_config, parse_config, get_latest_build, schedule_build};
     use super::{check_build_status};
     use std::fs::File;
     use std::io::{Read, Cursor};
@@ -449,13 +454,6 @@ mod tests {
         let json_string = read_config("tests/fixtures/config.json", Cursor::new("")).unwrap();
         let actual = parse_config(&json_string).unwrap();
 
-        assert_eq!(expected, actual);
-    }
-
-    #[test]
-    fn it_generate_tabs() {
-        let expected = "        ";
-        let actual = tabs(2);
         assert_eq!(expected, actual);
     }
 
