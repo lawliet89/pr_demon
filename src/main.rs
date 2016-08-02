@@ -146,7 +146,7 @@ fn format_time() -> String {
 
 fn prefix(x: usize) -> String {
     // https://stackoverflow.com/questions/31216646/repeat-string-with-integer-multiplication
-    format!("{}[{}] ", iter::repeat("    ").take(x).collect::<String>(), format_time())
+    format!("[{}]{} ", format_time(), iter::repeat("    ").take(x).collect::<String>())
 }
 
 fn read_config<R>(path: &str, reader: R) -> Result<String, String>
