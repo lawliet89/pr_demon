@@ -258,15 +258,21 @@ impl BitbucketCredentials {
     fn update_pr_build_status_comment(&self, pr: &::PullRequest, build: &::BuildDetails, state: &BuildState)
             -> Result<Comment, String> {
         let text = match *state {
-            BuildState::INPROGRESS => ::make_queued_comment(&build.web_url, &pr.from_commit),
+            BuildState::INPROGRESS => make_queued_comment(&build.web_url, &pr.from_commit),
             BuildState::FAILED => {
                 let status_text = match build.status_text {
                     None => "".to_owned(),
                     Some(ref text) => text.to_owned()
                 };
-                ::make_failure_comment(&build.web_url, &pr.from_commit, &status_text)
+                make_failure_comment(&build.web_url, &pr.from_commit, &status_text)
             },
-            BuildState::SUCCESSFUL => ::make_success_comment(&build.web_url, &pr.from_commit)
+            BuildState::SUCCESSFUL => {
+                let status_text = match build.status_text {
+                    None => "".to_owned(),
+                    Some(ref text) => text.to_owned()
+                };
+                make_success_comment(&build.web_url, &pr.from_commit, &status_text)
+            }
         };
 
         match self.get_comments(pr.id) {
@@ -394,4 +400,16 @@ impl BitbucketCredentials {
             description: description.to_owned()
         }
     }
+}
+
+fn make_queued_comment(build_url: &str, commit_id: &str) -> String {
+    format!("⏳ [Build]({}) for commit {} queued", build_url, commit_id)
+}
+
+fn make_success_comment(build_url: &str, commit_id: &str, build_message: &str) -> String {
+    format!("✔️ [Build]({}) for commit {} is **successful**: {}", build_url, commit_id, build_message)
+}
+
+fn make_failure_comment(build_url: &str, commit_id: &str, build_message: &str) -> String {
+    format!("❌ [Build]({}) for commit {} has **failed**: {}", build_url, commit_id, build_message)
 }

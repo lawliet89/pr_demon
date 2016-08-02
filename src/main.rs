@@ -177,18 +177,6 @@ fn parse_config(json: &str) -> Result<Config, String> {
     }
 }
 
-fn make_queued_comment(build_url: &str, commit_id: &str) -> String {
-    format!("⏳ [Build]({}) for commit {} queued", build_url, commit_id)
-}
-
-fn make_success_comment(build_url: &str, commit_id: &str) -> String {
-    format!("✔️ [Build]({}) for commit {} is **successful**", build_url, commit_id)
-}
-
-fn make_failure_comment(build_url: &str, commit_id: &str, build_message: &str) -> String {
-    format!("❌ [Build]({}) for commit {} has **failed**: {}", build_url, commit_id, build_message)
-}
-
 fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<BuildDetails> {
     let branch_name = pr.branch_name();
     let pr_commit = &pr.from_commit;
