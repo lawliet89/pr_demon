@@ -111,7 +111,7 @@ mod tests {
     fn it_broadcasts_messages_correctly() {
         let mut fanout = Fanout::<Message>::new();
 
-        let suubscriber_one = fanout.subscribe();
+        let subscriber = fanout.subscribe();
         let subscriber_two = fanout.subscribe();
 
         let expected_message = Message::new(OpCode::OpenPullRequest, &test_payload());
@@ -120,7 +120,7 @@ mod tests {
         fanout.broadcast(&expected_message);
 
         timeout_ms(move || {
-            let message = suubscriber_one.recv();
+            let message = subscriber.recv();
             assert_eq!(expected_message, message.unwrap());
         }, TIMEOUT);
 
@@ -135,7 +135,7 @@ mod tests {
     fn it_does_not_panic_with_dropped_subscribers() {
         let mut fanout = Fanout::<Message>::new();
 
-        let suubscriber_one = fanout.subscribe();
+        let subscriber = fanout.subscribe();
         {
             let _subscriber_two = fanout.subscribe(); // will be dropped after this
             assert_eq!(fanout.subscribers.lock().unwrap().len(), 2);
@@ -146,7 +146,7 @@ mod tests {
         fanout.broadcast(&expected_message);
 
         timeout_ms(move || {
-            let message = suubscriber_one.recv();
+            let message = subscriber.recv();
             assert_eq!(expected_message, message.unwrap());
         }, TIMEOUT);
 

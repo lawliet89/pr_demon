@@ -10,6 +10,7 @@ test = true
 [dependencies]
 hyper = "*"
 rustc-serialize = "*"
+telegram-bot = "0.4"
 time = "*"
 url = "*"
 

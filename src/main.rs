@@ -1,12 +1,14 @@
 extern crate hyper;
 extern crate rustc_serialize;
-extern crate url;
+extern crate telegram_bot;
 extern crate time;
+extern crate url;
 
-mod rest;
-mod fanout;
 mod bitbucket;
+mod fanout;
+mod rest;
 mod teamcity;
+mod telegram;
 
 use std::env;
 use std::fs::File;
@@ -117,6 +119,9 @@ fn main() {
             println!("Broadcast received: {:?} {}", message.opcode, message.payload)
         }
     });
+
+    let token = env::var_os("TELEGRAM_BOT_TOKEN").unwrap().to_str().unwrap();
+    telegram::TelegramAnnouncer::announce_to(token, fanout.subscribe(), -0i64);
 
     let sleep_duration = std::time::Duration::new(config.run_interval, 0);
 
