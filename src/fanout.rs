@@ -4,7 +4,7 @@ use std::thread::spawn;
 use std::marker::Send;
 use rustc_serialize::{json, Encodable};
 
-#[derive(RustcDecodable, RustcEncodable, Debug, Clone)]
+#[derive(RustcDecodable, RustcEncodable, PartialEq, Debug, Clone)]
 pub enum OpCode {
     OpenPullRequest,
     BuildFound,
@@ -15,14 +15,14 @@ pub enum OpCode {
     BuildQueued
 }
 
-#[derive(RustcDecodable, RustcEncodable, Debug, Clone)]
+#[derive(RustcDecodable, RustcEncodable, PartialEq, Debug, Clone)]
 pub struct Message {
     pub opcode: OpCode,
     pub payload: String
 }
 
 impl Message {
-    pub fn make<T>(opcode: OpCode, payload: &T) -> Message where T: Encodable {
+    pub fn new<T>(opcode: OpCode, payload: &T) -> Message where T: Encodable {
         let encoded = json::encode(payload).unwrap();
         Message {
             opcode: opcode,
@@ -33,7 +33,7 @@ impl Message {
 
 pub struct Fanout<T> where T : 'static + Send + Sync + Clone {
     broadcast_tx: Sender<T>,
-    subscribers: Arc<Mutex<Vec<Sender<T>>>>
+    pub subscribers: Arc<Mutex<Vec<Sender<T>>>>
 }
 
 impl<T> Fanout<T>  where T : 'static + Send + Sync + Clone {
@@ -86,5 +86,69 @@ impl<T> Fanout<T>  where T : 'static + Send + Sync + Clone {
                 panic!("Broadcaster has been deallocated {}", err);
             }
         };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use timebomb::timeout_ms;
+    use super::{Fanout, Message, OpCode};
+    use super::super::PullRequest;
+
+    const TIMEOUT: u32 = 1000;
+
+    fn test_payload() -> PullRequest {
+        PullRequest {
+            id: 111,
+            web_url: "http://www.foobar.com".to_owned(),
+            from_ref: "abc".to_owned(),
+            from_commit: "ffffff".to_owned()
+        }
+    }
+
+    #[test]
+    fn it_broadcasts_messages_correctly() {
+        let mut fanout = Fanout::<Message>::new();
+
+        let suubscriber_one = fanout.subscribe();
+        let subscriber_two = fanout.subscribe();
+
+        let expected_message = Message::new(OpCode::OpenPullRequest, &test_payload());
+        let expected_message_clone = expected_message.clone();
+
+        fanout.broadcast(&expected_message);
+
+        timeout_ms(move || {
+            let message = suubscriber_one.recv();
+            assert_eq!(expected_message, message.unwrap());
+        }, TIMEOUT);
+
+
+        timeout_ms(move || {
+            let message = subscriber_two.recv();
+            assert_eq!(expected_message_clone, message.unwrap());
+        }, TIMEOUT);
+    }
+
+    #[test]
+    fn it_does_not_panic_with_dropped_subscribers() {
+        let mut fanout = Fanout::<Message>::new();
+
+        let suubscriber_one = fanout.subscribe();
+        {
+            let _subscriber_two = fanout.subscribe(); // will be dropped after this
+            assert_eq!(fanout.subscribers.lock().unwrap().len(), 2);
+        }
+
+        let expected_message = Message::new(OpCode::OpenPullRequest, &test_payload());
+
+        fanout.broadcast(&expected_message);
+
+        timeout_ms(move || {
+            let message = suubscriber_one.recv();
+            assert_eq!(expected_message, message.unwrap());
+        }, TIMEOUT);
+
+        assert_eq!(fanout.subscribers.lock().unwrap().len(), 1);
     }
 }

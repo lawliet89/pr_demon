@@ -2,6 +2,7 @@ extern crate hyper;
 extern crate rustc_serialize;
 extern crate url;
 extern crate time;
+extern crate timebomb;
 
 mod rest;
 mod fanout;
@@ -132,20 +133,20 @@ fn main() {
         println!("{}{} Open Pull Requests Found", prefix(0), pull_requests.len());
 
         for pr in &pull_requests {
-            fanout.broadcast(&Message::make(OpCode::OpenPullRequest, &pr));
+            fanout.broadcast(&Message::new(OpCode::OpenPullRequest, &pr));
             println!("{}Pull Request #{} ({})", prefix(1), pr.id, pr.web_url);
             match get_latest_build(&pr, &config.teamcity) {
                 None => {
-                    fanout.broadcast(&Message::make(OpCode::BuildNotFound, &pr));
+                    fanout.broadcast(&Message::new(OpCode::BuildNotFound, &pr));
                     match schedule_build(&pr, &config.teamcity, &config.bitbucket) {
                         Err(err) => println!("{}{}", prefix(2), err),
                         Ok(build) => {
-                            fanout.broadcast(&Message::make(OpCode::BuildScheduled, &build));
+                            fanout.broadcast(&Message::new(OpCode::BuildScheduled, &build));
                         }
                     }
                 },
                 Some(build) =>  {
-                    fanout.broadcast(&Message::make(OpCode::BuildFound, &build));
+                    fanout.broadcast(&Message::new(OpCode::BuildFound, &build));
                     match check_build_status(&pr, &build, &config.bitbucket) {
                         Err(err) => println!("{}{}", prefix(2), err),
                         Ok(build_status_tuple) => {
@@ -161,7 +162,7 @@ fn main() {
                                     OpCode::BuildFinished { success: success }
                                 }
                             };
-                            fanout.broadcast(&Message::make(opcode, &build));
+                            fanout.broadcast(&Message::new(opcode, &build));
                         }
                     }
                 }

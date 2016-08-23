@@ -12,3 +12,6 @@ hyper = "*"
 rustc-serialize = "*"
 time = "*"
 url = "*"
+
+[dev-dependencies]
+timebomb = "*"
