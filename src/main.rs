@@ -13,7 +13,9 @@ use std::fs::File;
 use std::io::{self, Read};
 use std::iter;
 use std::boxed::Box;
+use std::thread;
 use rustc_serialize::json;
+use fanout::{Fanout, Message, OpCode};
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 struct Config { // TODO: Rename fields
@@ -27,7 +29,7 @@ pub trait UsernameAndPassword {
     fn password(&self) -> &String;
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(RustcEncodable, Eq, PartialEq, Clone, Debug)]
 pub struct PullRequest {
     pub id: i32,
     pub web_url: String,
@@ -95,7 +97,7 @@ pub trait ContinuousIntegrator {
 fn main() {
     let config_path = match env::args().nth(1) {
         Some(x) => x,
-        None => panic!("Usage ./pr_demon path_to_   config.json")
+        None => panic!("Usage ./pr_demon path_to_config.json (Use - to read from stdin)")
     };
     let config_json = match read_config(&config_path, io::stdin()) {
         Ok(x) => x,
@@ -106,6 +108,15 @@ fn main() {
         Ok(x) => x,
         Err(err) => panic!(err)
     };
+
+    let mut fanout = Fanout::<Message>::new();
+
+    let subscriber = fanout.subscribe();
+    thread::spawn(move || {
+        for message in subscriber.iter() {
+            println!("Broadcast received: {:?} {}", message.opcode, message.payload)
+        }
+    });
 
     let sleep_duration = std::time::Duration::new(config.run_interval, 0);
 
@@ -121,6 +132,8 @@ fn main() {
         println!("{}{} Open Pull Requests Found", prefix(0), pull_requests.len());
 
         for pr in &pull_requests {
+            fanout.broadcast(&Message::make(OpCode::OpenPullRequest, &pr));
+
             println!("{}Pull Request #{} ({})", prefix(1), pr.id, pr.web_url);
             match get_latest_build(&pr, &config.teamcity) {
                 None => {
