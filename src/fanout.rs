@@ -91,7 +91,8 @@ impl<T> Fanout<T>  where T : 'static + Send + Sync + Clone {
 
 #[cfg(test)]
 mod tests {
-    use timebomb::timeout_ms;
+    extern crate timebomb;
+    use self::timebomb::timeout_ms;
     use super::{Fanout, Message, OpCode};
     use super::super::PullRequest;
 
