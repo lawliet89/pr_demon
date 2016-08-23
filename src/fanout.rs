@@ -45,8 +45,24 @@ impl<T> Fanout<T>  where T : 'static + Send + Sync + Clone {
         spawn(move || {
             println!("Broadcast loop");
             for message in broadcast_rx.iter() {
-                for subscriber_tx in cloned_subscribers.lock().unwrap().iter() {
-                    subscriber_tx.send(message.clone());
+                let subscribers_mutex = cloned_subscribers.lock();
+                if let Err(err) = subscribers_mutex {
+                    panic!("Subscriber mutex gave an error {}", err)
+                }
+                let mut subscribers = subscribers_mutex.unwrap();
+                let mut stale_subscribers_indices = Vec::<usize>::new();
+                for (index, subscriber_tx) in subscribers.iter().enumerate() {
+                    match subscriber_tx.send(message.clone()) {
+                        Ok(_) => {},
+                        Err(_) => {
+                            stale_subscribers_indices.push(index);
+                        }
+                    };
+                }
+                // Prune stale indices
+                stale_subscribers_indices.sort();
+                for index in stale_subscribers_indices.into_iter().rev() {
+                    subscribers.remove(index);
                 }
             }
         });
@@ -64,6 +80,11 @@ impl<T> Fanout<T>  where T : 'static + Send + Sync + Clone {
     }
 
     pub fn broadcast(&self, message: &T) {
-        self.broadcast_tx.send(message.clone());
+        match self.broadcast_tx.send(message.clone()) {
+            Ok(_) => {},
+            Err(err) => {
+                panic!("Broadcaster has been deallocated {}", err);
+            }
+        };
     }
 }

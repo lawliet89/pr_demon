@@ -63,21 +63,21 @@ pub struct Build {
     pub id: i32
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(RustcEncodable, RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub enum BuildState {
     Queued,
     Finished,
     Running
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(RustcEncodable, RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub enum BuildStatus {
     Success,
     Failure,
     Unknown
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
 pub struct BuildDetails {
     pub id: i32,
     pub build_id: String,
@@ -133,19 +133,36 @@ fn main() {
 
         for pr in &pull_requests {
             fanout.broadcast(&Message::make(OpCode::OpenPullRequest, &pr));
-
             println!("{}Pull Request #{} ({})", prefix(1), pr.id, pr.web_url);
             match get_latest_build(&pr, &config.teamcity) {
                 None => {
+                    fanout.broadcast(&Message::make(OpCode::BuildNotFound, &pr));
                     match schedule_build(&pr, &config.teamcity, &config.bitbucket) {
                         Err(err) => println!("{}{}", prefix(2), err),
-                        Ok(_) => {}
+                        Ok(build) => {
+                            fanout.broadcast(&Message::make(OpCode::BuildScheduled, &build));
+                        }
                     }
                 },
                 Some(build) =>  {
+                    fanout.broadcast(&Message::make(OpCode::BuildFound, &build));
                     match check_build_status(&pr, &build, &config.bitbucket) {
                         Err(err) => println!("{}{}", prefix(2), err),
-                        Ok(_) => {}
+                        Ok(build_status_tuple) => {
+                            let (build_state, build_status) = build_status_tuple;
+                            let opcode = match build_state {
+                                BuildState::Queued => OpCode::BuildQueued,
+                                BuildState::Running => OpCode::BuildRunning,
+                                BuildState::Finished => {
+                                    let success = match build_status {
+                                        BuildStatus::Success => true,
+                                        _ => false
+                                    };
+                                    OpCode::BuildFinished { success: success }
+                                }
+                            };
+                            fanout.broadcast(&Message::make(opcode, &build));
+                        }
                     }
                 }
             };
