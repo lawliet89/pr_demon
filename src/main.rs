@@ -23,6 +23,7 @@ use fanout::{Fanout, Message, OpCode};
 struct Config { // TODO: Rename fields
     teamcity: teamcity::TeamcityCredentials,
     bitbucket: bitbucket::BitbucketCredentials,
+    telegram: Option<telegram::TelegramCredentials>,
     run_interval: u64
 }
 
@@ -120,8 +121,11 @@ fn main() {
         }
     });
 
-    let token = env::var_os("TELEGRAM_BOT_TOKEN").unwrap().to_str().unwrap();
-    telegram::TelegramAnnouncer::announce_to(token, fanout.subscribe(), -0i64);
+    if let Some(t) = config.telegram {
+        if t.enabled {
+            t.announce_from(fanout.subscribe()).expect("Failed to authenticate with Telegram");
+        }
+    }
 
     let sleep_duration = std::time::Duration::new(config.run_interval, 0);
 
@@ -326,7 +330,7 @@ fn check_build_status(pr: &PullRequest, build: &BuildDetails, repo: &Repository)
 
 #[cfg(test)]
 mod tests {
-    use super::{bitbucket, teamcity, Config, PullRequest, ContinuousIntegrator, Build};
+    use super::{bitbucket, teamcity, telegram, Config, PullRequest, ContinuousIntegrator, Build};
     use super::{BuildDetails, BuildStatus, BuildState, Repository};
     use super::{read_config, parse_config, get_latest_build, schedule_build};
     use super::{check_build_status};
@@ -472,6 +476,11 @@ mod tests {
                 build_id: "foobar".to_owned(),
                 base_url: "https://www.foobar.com/rest".to_owned()
             },
+            telegram: Some(telegram::TelegramCredentials {
+                enabled: true,
+                api_token: "XXX:XXXX".to_owned(),
+                room: -1234567890i64
+            }),
             run_interval: 999
         };
 

@@ -13,5 +13,10 @@
     "repo_slug": "bar",
     "post_build": false
   },
+  "telegram": {
+    "enabled": true,
+    "api_token": "XXX:XXXX",
+    "room": "-1234567890"
+  },
   "run_interval": 999
 }
