@@ -24,7 +24,8 @@ struct Config { // TODO: Rename fields
     teamcity: teamcity::TeamcityCredentials,
     bitbucket: bitbucket::BitbucketCredentials,
     telegram: Option<telegram::TelegramCredentials>,
-    run_interval: u64
+    run_interval: u64,
+    stdout_broadcast: Option<bool>
 }
 
 pub trait UsernameAndPassword {
@@ -114,12 +115,14 @@ fn main() {
 
     let mut fanout = Fanout::<Message>::new();
 
-    let subscriber = fanout.subscribe();
-    thread::spawn(move || {
-        for message in subscriber.iter() {
-            println!("Broadcast received: {:?} {}", message.opcode, message.payload)
-        }
-    });
+    if let Some(true) = config.stdout_broadcast {
+        let subscriber = fanout.subscribe();
+        thread::spawn(move || {
+            for message in subscriber.iter() {
+                println!("Fanout broadcast received: {:?} {}", message.opcode, message.payload)
+            }
+        });
+    }
 
     if let Some(t) = config.telegram {
         if t.enabled {
@@ -483,7 +486,8 @@ mod tests {
                 api_token: "XXX:XXXX".to_owned(),
                 room: -1234567890i64
             }),
-            run_interval: 999
+            run_interval: 999,
+            stdout_broadcast: false
         };
 
         let json_string = read_config("tests/fixtures/config.json", Cursor::new("")).unwrap();
