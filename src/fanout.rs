@@ -12,7 +12,8 @@ pub enum OpCode {
     BuildScheduled,
     BuildFinished { success: bool },
     BuildRunning,
-    BuildQueued
+    BuildQueued,
+    Custom { payload: String }
 }
 
 #[derive(RustcDecodable, RustcEncodable, PartialEq, Debug, Clone)]
@@ -31,6 +32,7 @@ impl Message {
     }
 }
 
+#[derive(Clone)]
 pub struct Fanout<T> where T : 'static + Send + Sync + Clone {
     broadcast_tx: Sender<T>,
     pub subscribers: Arc<Mutex<Vec<Sender<T>>>>
