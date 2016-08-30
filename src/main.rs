@@ -487,7 +487,7 @@ mod tests {
                 room: -1234567890i64
             }),
             run_interval: 999,
-            stdout_broadcast: false
+            stdout_broadcast: Some(false)
         };
 
         let json_string = read_config("tests/fixtures/config.json", Cursor::new("")).unwrap();
