@@ -3,6 +3,7 @@ use std::vec::Vec;
 use std::option::Option;
 
 use ::rest;
+use ::fanout;
 use hyper;
 use rustc_serialize::json;
 
@@ -151,23 +152,28 @@ pub struct BitbucketCredentials {
     pub post_build: bool
 }
 
-impl ::UsernameAndPassword for BitbucketCredentials {
+pub struct Bitbucket {
+    pub credentials: BitbucketCredentials,
+    broadcaster: fanout::Fanout<fanout::Message>
+}
+
+impl ::UsernameAndPassword for Bitbucket {
     fn username(&self) -> &String {
-        &self.username
+        &self.credentials.username
     }
 
     fn password(&self) -> &String {
-        &self.password
+        &self.credentials.password
     }
 }
 
-impl ::Repository for BitbucketCredentials {
+impl ::Repository for Bitbucket {
     fn get_pr_list(&self) -> Result<Vec<::PullRequest>, String> {
         let mut headers = rest::Headers::new();
         headers.add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header();
         let url = format!("{}/api/latest/projects/{}/repos/{}/pull-requests",
-            self.base_url, self.project_slug, self.repo_slug);
+            self.credentials.base_url, self.credentials.project_slug, self.credentials.repo_slug);
 
         match rest::get::<PagedApi<PullRequest>>(&url, &headers.headers) {
             Ok(ref prs) => {
@@ -189,7 +195,7 @@ impl ::Repository for BitbucketCredentials {
             Ok(_) => {},
             Err(err) => return Err(format!("Error submitting comment: {}", err))
         };
-        match self.post_build {
+        match self.credentials.post_build {
             true => {
                 match self.post_build(&build, &pr) {
                     Ok(_) => Ok(()),
@@ -210,7 +216,7 @@ impl ::Repository for BitbucketCredentials {
             Ok(_) => {},
             Err(err) => return Err(format!("Error submitting comment: {}", err))
         };
-        match self.post_build {
+        match self.credentials.post_build {
             true => {
                 match self.post_build(&build, &pr) {
                     Ok(_) => Ok(()),
@@ -226,7 +232,7 @@ impl ::Repository for BitbucketCredentials {
             Ok(_) => {},
             Err(err) => return Err(format!("Error submitting comment: {}", err))
         };
-        match self.post_build {
+        match self.credentials.post_build {
             true => {
                 match self.post_build(&build, &pr) {
                     Ok(_) => Ok(()),
@@ -238,7 +244,15 @@ impl ::Repository for BitbucketCredentials {
     }
 }
 
-impl BitbucketCredentials {
+impl Bitbucket {
+    pub fn new(credentials: &BitbucketCredentials, broadcaster: &fanout::Fanout<fanout::Message>)
+    -> Bitbucket {
+        Bitbucket {
+            credentials: credentials.to_owned(),
+            broadcaster: broadcaster.to_owned()
+        }
+    }
+
     fn matching_comments(comments: &Vec<Comment>, text: &str) -> Option<Comment> {
         let found_comment = comments.iter().find(|&comment| comment.text == text);
         match found_comment {
@@ -255,7 +269,8 @@ impl BitbucketCredentials {
         }
     }
 
-    fn update_pr_build_status_comment(&self, pr: &::PullRequest, build: &::BuildDetails, state: &BuildState)
+    fn update_pr_build_status_comment(&self, pr: &::PullRequest,
+        build: &::BuildDetails, state: &BuildState)
             -> Result<Comment, String> {
         let text = match *state {
             BuildState::INPROGRESS => make_queued_comment(&build.web_url, &pr.from_commit),
@@ -277,11 +292,11 @@ impl BitbucketCredentials {
 
         match self.get_comments(pr.id) {
             Ok(ref comments) => {
-                match BitbucketCredentials::matching_comments(&comments, &text) {
+                match Bitbucket::matching_comments(&comments, &text) {
                     Some(comment) => Ok(comment),
                     None => {
                         // Have to post or edit comment
-                        match BitbucketCredentials::matching_comments_substring(&comments, &pr.from_commit) {
+                        match Bitbucket::matching_comments_substring(&comments, &pr.from_commit) {
                             Some(comment) => self.edit_comment(pr.id, &comment, &text),
                             None => self.post_comment(pr.id, &text)
                         }
@@ -297,14 +312,15 @@ impl BitbucketCredentials {
         headers.add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header();
         let url = format!("{}/api/latest/projects/{}/repos/{}/pull-requests/{}/activities?fromType=COMMENT",
-                self.base_url, self.project_slug, self.repo_slug, pr_id);
+                self.credentials.base_url, self.credentials.project_slug,
+                self.credentials.repo_slug, pr_id);
 
         match rest::get::<PagedApi<Activity>>(&url, &headers.headers) {
             Ok(activities) =>{
                 Ok(
                     activities.values.iter()
                         .filter(|&activity| activity.comment.is_some())
-                        .filter(|&activity| activity.user.name == self.username)
+                        .filter(|&activity| activity.user.name == self.credentials.username)
                         .map(|ref activity| {
                             // won't panic because of filter above
                             activity.comment.as_ref().unwrap().to_owned()
@@ -326,7 +342,8 @@ impl BitbucketCredentials {
             text: text.to_owned()
         }).unwrap();
         let url = format!("{}/api/latest/projects/{}/repos/{}/pull-requests/{}/comments",
-                self.base_url, self.project_slug, self.repo_slug, pr_id);
+                self.credentials.base_url, self.credentials.project_slug,
+                self.credentials.repo_slug, pr_id);
 
         match rest::post::<Comment>(&url, &body, &headers.headers, &hyper::status::StatusCode::Created) {
             Ok(comment) => Ok(comment.to_owned()),
@@ -345,7 +362,8 @@ impl BitbucketCredentials {
             version: comment.version
         }).unwrap();
         let url = format!("{}/api/latest/projects/{}/repos/{}/pull-requests/{}/comments/{}",
-                self.base_url, self.project_slug, self.repo_slug, pr_id, comment.id);
+                self.credentials.base_url, self.credentials.project_slug,
+                self.credentials.repo_slug, pr_id, comment.id);
 
         match rest::put::<Comment>(&url, &body, &headers.headers, &hyper::status::StatusCode::Ok) {
             Ok(comment) => Ok(comment.to_owned()),
@@ -355,7 +373,7 @@ impl BitbucketCredentials {
 
 
     fn post_build(&self, build: &::BuildDetails, pr: &::PullRequest) -> Result<Build, String> {
-        let bitbucket_build = BitbucketCredentials::make_build(&build);
+        let bitbucket_build = Bitbucket::make_build(&build);
 
         let mut headers = rest::Headers::new();
         headers.add_authorization_header(self as &::UsernameAndPassword)
@@ -363,7 +381,8 @@ impl BitbucketCredentials {
             .add_content_type_json_header();
 
         let body = json::encode(&bitbucket_build).unwrap();
-        let url = format!("{}/build-status/1.0/commits/{}", self.base_url, pr.from_commit);
+        let url = format!("{}/build-status/1.0/commits/{}", self.credentials.base_url,
+            pr.from_commit);
 
         match rest::post_raw(&url, &body, &headers.headers) {
             Ok(response) => {

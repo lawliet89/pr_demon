@@ -127,10 +127,12 @@ fn main() {
         }
     }
 
+    let bitbucket = bitbucket::Bitbucket::new(&config.bitbucket, &fanout);
+
     let sleep_duration = std::time::Duration::new(config.run_interval, 0);
 
     loop {
-        let pull_requests = match config.bitbucket.get_pr_list() {
+        let pull_requests = match bitbucket.get_pr_list() {
             Err(err) => {
                 println!("{}Error getting Pull Requests: {}", prefix(0), err);
                 continue;
@@ -146,7 +148,7 @@ fn main() {
             match get_latest_build(&pr, &config.teamcity) {
                 None => {
                     fanout.broadcast(&Message::new(OpCode::BuildNotFound, &pr));
-                    match schedule_build(&pr, &config.teamcity, &config.bitbucket) {
+                    match schedule_build(&pr, &config.teamcity, &bitbucket) {
                         Err(err) => println!("{}{}", prefix(2), err),
                         Ok(build) => {
                             fanout.broadcast(&Message::new(OpCode::BuildScheduled, &build));
@@ -155,7 +157,7 @@ fn main() {
                 },
                 Some(build) =>  {
                     fanout.broadcast(&Message::new(OpCode::BuildFound, &build));
-                    match check_build_status(&pr, &build, &config.bitbucket) {
+                    match check_build_status(&pr, &build, &bitbucket) {
                         Err(err) => println!("{}{}", prefix(2), err),
                         Ok(build_status_tuple) => {
                             let (build_state, build_status) = build_status_tuple;
