@@ -1,6 +1,5 @@
 use std::io::Read;
-use rustc_serialize;
-use rustc_serialize::json;
+use rustc_serialize::{json, Decodable};
 use hyper;
 use hyper::client::Client;
 use hyper::header::{Authorization, Basic, Accept, qitem, ContentType};
@@ -58,12 +57,12 @@ impl Headers {
 }
 
 pub fn get<T>(url: &str, headers: &hyper::header::Headers) -> Result<T, String>
-    where T: rustc_serialize::Decodable {
+    where T: Decodable {
     request(url, hyper::method::Method::Get, &None, headers, &hyper::status::StatusCode::Ok)
 }
 
 pub fn post<T>(url: &str, body: &str, headers: &hyper::header::Headers, status_code: &hyper::status::StatusCode)
-         -> Result<T, String> where T: rustc_serialize::Decodable {
+         -> Result<T, String> where T: Decodable {
     request(url, hyper::method::Method::Post, &Some(body.to_owned()), headers, status_code)
 }
 
@@ -73,7 +72,7 @@ pub fn post_raw(url: &str, body: &str, headers: &hyper::header::Headers)
 }
 
 pub fn put<T>(url: &str, body: &str, headers: &hyper::header::Headers, status_code: &hyper::status::StatusCode)
-         -> Result<T, String> where T: rustc_serialize::Decodable {
+         -> Result<T, String> where T: Decodable {
     request(url, hyper::method::Method::Put, &Some(body.to_owned()), headers, status_code)
 }
 
@@ -97,7 +96,7 @@ fn request<T>(url: &str,
               body: &Option<String>,
               headers: &hyper::header::Headers,
               status_code: &hyper::status::StatusCode)
-                    -> Result<T, String> where T: rustc_serialize::Decodable {
+                    -> Result<T, String> where T: Decodable {
     let mut response = match request_raw(url, method, body, headers) {
         Ok(response) => response,
         Err(err) => return Err(err.to_string())

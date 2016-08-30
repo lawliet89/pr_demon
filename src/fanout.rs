@@ -1,8 +1,10 @@
+use std::collections::BTreeMap;
+use std::collections::btree_map::{Iter, IterMut};
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread::spawn;
 use std::marker::Send;
-use rustc_serialize::{json, Encodable};
+use rustc_serialize::{json, Encodable, Decodable};
 
 #[derive(RustcDecodable, RustcEncodable, PartialEq, Debug, Clone)]
 pub enum OpCode {
@@ -23,12 +25,75 @@ pub struct Message {
 }
 
 impl Message {
-    pub fn new<T>(opcode: OpCode, payload: &T) -> Message where T: Encodable {
+    pub fn new<T>(opcode: OpCode, payload: &T) -> Message where T : Encodable {
         let encoded = json::encode(payload).unwrap();
         Message {
             opcode: opcode,
             payload: encoded
         }
+    }
+}
+
+#[derive(RustcDecodable, RustcEncodable, PartialEq, Debug, Clone)]
+pub struct JsonDictionary {
+    dictionary: BTreeMap<String, String>
+}
+
+impl JsonDictionary {
+    pub fn new() -> JsonDictionary {
+        JsonDictionary {
+            dictionary: BTreeMap::new()
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.dictionary.clear();
+    }
+
+    pub fn get<T>(&self, key: &str) -> Option<Result<T, json::DecoderError>> where T: Decodable {
+        let json = self.dictionary.get(key);
+        match json {
+            None => None,
+            Some(ref json) => Some(json::decode(json))
+        }
+    }
+
+    pub fn contains_key(&self, key: &str) -> bool {
+        self.dictionary.contains_key(key)
+    }
+
+    pub fn insert<T>(&mut self, key: &str, value: &T)
+            -> Result<(), json::EncoderError> where T : Encodable {
+        match json::encode(value) {
+            Ok(encoded) => {
+                self.dictionary.insert(key.to_owned(), encoded);
+                Ok(())
+            },
+            Err(err) => Err(err)
+        }
+    }
+
+    pub fn remove(&mut self, key: &str) -> bool {
+        match self.dictionary.remove(key) {
+            Some(_) => true,
+            None => false
+        }
+    }
+
+    pub fn iter(&self) -> Iter<String, String> {
+        return self.dictionary.iter();
+    }
+
+    pub fn iter_mut(&mut self) -> IterMut<String, String> {
+        return self.dictionary.iter_mut();
+    }
+
+    pub fn len(&self) -> usize {
+        return self.dictionary.len();
+    }
+
+    pub fn is_empty(&self) -> bool {
+        return self.dictionary.is_empty();
     }
 }
 

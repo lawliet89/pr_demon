@@ -5,7 +5,7 @@ use std::option::Option;
 use ::rest;
 use ::fanout;
 use hyper;
-use rustc_serialize::json;
+use rustc_serialize::{json, Encodable};
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
@@ -38,7 +38,7 @@ struct PullRequest {
     links: BTreeMap<String, Vec<Link>>
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
 struct Comment {
     id: i32,
@@ -95,7 +95,7 @@ struct PullRequestParticipant {
     approved: bool
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
 struct User {
     name: String,
@@ -108,7 +108,7 @@ struct User {
     // type: String
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
 struct Link {
     href: String,
     name: Option<String>
@@ -253,6 +253,14 @@ impl Bitbucket {
         }
     }
 
+    fn broadcast<T>(&self, opcode: &str, payload: &T) where T : Encodable {
+        let opcode = fanout::OpCode::Custom {
+            payload: format!("Bitbucket::{}", opcode).to_owned()
+        };
+        let message = fanout::Message::new(opcode, payload);
+        self.broadcaster.broadcast(&message);
+    }
+
     fn matching_comments(comments: &Vec<Comment>, text: &str) -> Option<Comment> {
         let found_comment = comments.iter().find(|&comment| comment.text == text);
         match found_comment {
@@ -290,21 +298,37 @@ impl Bitbucket {
             }
         };
 
-        match self.get_comments(pr.id) {
+        let mut event_payload = fanout::JsonDictionary::new();
+        event_payload.insert("pr", &pr).expect("PR should be RustcEncodable");
+        event_payload.insert("build", &build).expect("Build should be RustcEncodable");
+
+        let (comment, opcode) = match self.get_comments(pr.id) {
             Ok(ref comments) => {
                 match Bitbucket::matching_comments(&comments, &text) {
-                    Some(comment) => Ok(comment),
+                    Some(comment) => (Ok(comment), "Existing"),
                     None => {
                         // Have to post or edit comment
                         match Bitbucket::matching_comments_substring(&comments, &pr.from_commit) {
-                            Some(comment) => self.edit_comment(pr.id, &comment, &text),
-                            None => self.post_comment(pr.id, &text)
+                            Some(comment) => {
+                                (self.edit_comment(pr.id, &comment, &text), "Edit")
+                            },
+                            None => (self.post_comment(pr.id, &text), "Post")
                         }
                     }
                 }
             },
-            Err(err) => Err(format!("Error getting list of comments {}", err))
-        }
+            Err(err) => (Err(format!("Error getting list of comments {}", err)), "Error")
+        };
+
+        match comment {
+            Ok(ref comment) => {
+                event_payload.insert("comment", comment) .expect("Comment should be RustcEncodable");
+            },
+            Err(_) => {}
+        };
+
+        self.broadcast(&format!("Comment::{}", opcode), &event_payload);
+        comment
     }
 
     fn get_comments(&self, pr_id: i32) -> Result<Vec<Comment>, String> {
@@ -370,7 +394,6 @@ impl Bitbucket {
             Err(err) =>  Err(format!("Error posting comment {}", err))
         }
     }
-
 
     fn post_build(&self, build: &::BuildDetails, pr: &::PullRequest) -> Result<Build, String> {
         let bitbucket_build = Bitbucket::make_build(&build);
