@@ -310,7 +310,7 @@ impl Bitbucket {
                         // Have to post or edit comment
                         match Bitbucket::matching_comments_substring(&comments, &pr.from_commit) {
                             Some(comment) => {
-                                (self.edit_comment(pr.id, &comment, &text), "Edit")
+                                (self.edit_comment(pr.id, &comment, &text), "Update")
                             },
                             None => (self.post_comment(pr.id, &text), "Post")
                         }

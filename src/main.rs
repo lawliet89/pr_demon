@@ -32,7 +32,7 @@ pub trait UsernameAndPassword {
     fn password(&self) -> &String;
 }
 
-#[derive(RustcEncodable, Eq, PartialEq, Clone, Debug)]
+#[derive(RustcEncodable, RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct PullRequest {
     pub id: i32,
     pub web_url: String,
