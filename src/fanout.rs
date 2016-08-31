@@ -161,7 +161,7 @@ mod tests {
     extern crate timebomb;
     use self::timebomb::timeout_ms;
     use super::{Fanout, Message, OpCode};
-    use super::super::PullRequest;
+    use super::super::{PullRequest, User};
 
     const TIMEOUT: u32 = 1000;
 
@@ -170,7 +170,12 @@ mod tests {
             id: 111,
             web_url: "http://www.foobar.com".to_owned(),
             from_ref: "abc".to_owned(),
-            from_commit: "ffffff".to_owned()
+            from_commit: "ffffff".to_owned(),
+            title: "A very important PR".to_owned(),
+            author: User {
+                name: "Aaron Xiao Ming".to_owned(),
+                email: "aaron@xiao.ming".to_owned()
+            }
         }
     }
 

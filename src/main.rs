@@ -338,7 +338,7 @@ fn check_build_status(pr: &PullRequest, build: &BuildDetails, repo: &Repository)
 #[cfg(test)]
 mod tests {
     use super::{bitbucket, teamcity, telegram, Config, PullRequest, ContinuousIntegrator, Build};
-    use super::{BuildDetails, BuildStatus, BuildState, Repository};
+    use super::{BuildDetails, BuildStatus, BuildState, Repository, User};
     use super::{read_config, parse_config, get_latest_build, schedule_build};
     use super::{check_build_status};
     use std::fs::File;
@@ -393,7 +393,12 @@ mod tests {
             id: 111,
             web_url: "http://www.foobar.com/pr/111".to_owned(),
             from_ref: "refs/heads/branch_name".to_owned(),
-            from_commit: "363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned()
+            from_commit: "363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned(),
+            title: "A very important PR".to_owned(),
+            author: User {
+                name: "Aaron Xiao Ming".to_owned(),
+                email: "aaron@xiao.ming".to_owned()
+            }
         }
     }
 
