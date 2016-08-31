@@ -24,7 +24,8 @@ struct Config { // TODO: Rename fields
     teamcity: teamcity::TeamcityCredentials,
     bitbucket: bitbucket::BitbucketCredentials,
     telegram: Option<telegram::TelegramCredentials>,
-    run_interval: u64
+    run_interval: u64,
+    stdout_broadcast: Option<bool>
 }
 
 pub trait UsernameAndPassword {
@@ -32,12 +33,14 @@ pub trait UsernameAndPassword {
     fn password(&self) -> &String;
 }
 
-#[derive(RustcEncodable, Eq, PartialEq, Clone, Debug)]
+#[derive(RustcEncodable, RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct PullRequest {
     pub id: i32,
     pub web_url: String,
     pub from_ref: String,
-    pub from_commit: String
+    pub from_commit: String,
+    pub title: String,
+    pub author: User
 }
 
 impl PullRequest {
@@ -47,10 +50,10 @@ impl PullRequest {
     }
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
-pub struct Comment {
-    pub id: i32,
-    pub text: String
+#[derive(RustcEncodable, RustcDecodable, Eq, PartialEq, Clone, Debug)]
+pub struct User {
+    pub name: String,
+    pub email: String
 }
 
 pub trait Repository {
@@ -114,12 +117,14 @@ fn main() {
 
     let mut fanout = Fanout::<Message>::new();
 
-    let subscriber = fanout.subscribe();
-    thread::spawn(move || {
-        for message in subscriber.iter() {
-            println!("Broadcast received: {:?} {}", message.opcode, message.payload)
-        }
-    });
+    if let Some(true) = config.stdout_broadcast {
+        let subscriber = fanout.subscribe();
+        thread::spawn(move || {
+            for message in subscriber.iter() {
+                println!("Fanout broadcast received: {:?} {}", message.opcode, message.payload)
+            }
+        });
+    }
 
     if let Some(t) = config.telegram {
         if t.enabled {
@@ -127,10 +132,12 @@ fn main() {
         }
     }
 
+    let bitbucket = bitbucket::Bitbucket::new(&config.bitbucket, &fanout);
+
     let sleep_duration = std::time::Duration::new(config.run_interval, 0);
 
     loop {
-        let pull_requests = match config.bitbucket.get_pr_list() {
+        let pull_requests = match bitbucket.get_pr_list() {
             Err(err) => {
                 println!("{}Error getting Pull Requests: {}", prefix(0), err);
                 continue;
@@ -146,7 +153,7 @@ fn main() {
             match get_latest_build(&pr, &config.teamcity) {
                 None => {
                     fanout.broadcast(&Message::new(OpCode::BuildNotFound, &pr));
-                    match schedule_build(&pr, &config.teamcity, &config.bitbucket) {
+                    match schedule_build(&pr, &config.teamcity, &bitbucket) {
                         Err(err) => println!("{}{}", prefix(2), err),
                         Ok(build) => {
                             fanout.broadcast(&Message::new(OpCode::BuildScheduled, &build));
@@ -155,7 +162,7 @@ fn main() {
                 },
                 Some(build) =>  {
                     fanout.broadcast(&Message::new(OpCode::BuildFound, &build));
-                    match check_build_status(&pr, &build, &config.bitbucket) {
+                    match check_build_status(&pr, &build, &bitbucket) {
                         Err(err) => println!("{}{}", prefix(2), err),
                         Ok(build_status_tuple) => {
                             let (build_state, build_status) = build_status_tuple;
@@ -331,7 +338,7 @@ fn check_build_status(pr: &PullRequest, build: &BuildDetails, repo: &Repository)
 #[cfg(test)]
 mod tests {
     use super::{bitbucket, teamcity, telegram, Config, PullRequest, ContinuousIntegrator, Build};
-    use super::{BuildDetails, BuildStatus, BuildState, Repository};
+    use super::{BuildDetails, BuildStatus, BuildState, Repository, User};
     use super::{read_config, parse_config, get_latest_build, schedule_build};
     use super::{check_build_status};
     use std::fs::File;
@@ -386,7 +393,12 @@ mod tests {
             id: 111,
             web_url: "http://www.foobar.com/pr/111".to_owned(),
             from_ref: "refs/heads/branch_name".to_owned(),
-            from_commit: "363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned()
+            from_commit: "363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned(),
+            title: "A very important PR".to_owned(),
+            author: User {
+                name: "Aaron Xiao Ming".to_owned(),
+                email: "aaron@xiao.ming".to_owned()
+            }
         }
     }
 
@@ -481,7 +493,8 @@ mod tests {
                 api_token: "XXX:XXXX".to_owned(),
                 room: -1234567890i64
             }),
-            run_interval: 999
+            run_interval: 999,
+            stdout_broadcast: Some(false)
         };
 
         let json_string = read_config("tests/fixtures/config.json", Cursor::new("")).unwrap();
