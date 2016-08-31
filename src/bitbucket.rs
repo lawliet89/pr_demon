@@ -182,7 +182,12 @@ impl ::Repository for Bitbucket {
                         id: pr.id,
                         web_url: pr.links["self"][0].href.to_owned(),
                         from_ref: pr.fromRef.id.to_owned(),
-                        from_commit: pr.fromRef.latestCommit.to_owned()
+                        from_commit: pr.fromRef.latestCommit.to_owned(),
+                        title: pr.title.to_owned(),
+                        author: ::User {
+                            name: pr.author.user.displayName.to_owned(),
+                            email: pr.author.user.emailAddress.to_owned()
+                        }
                     }
                 }).collect())
             },

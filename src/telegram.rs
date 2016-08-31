@@ -33,7 +33,7 @@ impl TelegramCredentials {
                         let dictionary: JsonDictionary = json::decode(&message.payload).unwrap();
                         // should panic if the deserialization failed
                         let build = Self::unwrap_from_json_dictionary::<::BuildDetails>(&dictionary, "build").unwrap();
-                        if build.state != ::BuildState::Finished || build.status == ::BuildStatus::Success {
+                        if build.state != ::BuildState::Finished  {
                             continue;
                         }
 
@@ -44,8 +44,8 @@ impl TelegramCredentials {
                             Some(text) => text,
                             None => "".to_owned()
                         };
-                        let message_text = format!("❌ Tests for Pull Request #{} has failed: {}\nPR: {}\nBuild: {}",
-                            pr.id, status_text, pr.web_url, build.web_url);
+                        let message_text = format!("⚠ Tests for Pull Request #{} has failed\n{}\n{}\nBy {}\n{}\n{}",
+                            pr.id, status_text, pr.title, pr.author.name, pr.web_url, build.web_url);
 
                         Self::send_message(&api, room, message_text);
                         thread::sleep(telegram_sleep_duration);

@@ -38,7 +38,9 @@ pub struct PullRequest {
     pub id: i32,
     pub web_url: String,
     pub from_ref: String,
-    pub from_commit: String
+    pub from_commit: String,
+    pub title: String,
+    pub author: User
 }
 
 impl PullRequest {
@@ -48,10 +50,10 @@ impl PullRequest {
     }
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
-pub struct Comment {
-    pub id: i32,
-    pub text: String
+#[derive(RustcEncodable, RustcDecodable, Eq, PartialEq, Clone, Debug)]
+pub struct User {
+    pub name: String,
+    pub email: String
 }
 
 pub trait Repository {
