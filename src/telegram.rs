@@ -33,7 +33,7 @@ impl TelegramCredentials {
                         let dictionary: JsonDictionary = json::decode(&message.payload).unwrap();
                         // should panic if the deserialization failed
                         let build = Self::unwrap_from_json_dictionary::<::BuildDetails>(&dictionary, "build").unwrap();
-                        if build.state != ::BuildState::Finished  {
+                        if build.state != ::BuildState::Finished  || build.status == ::BuildStatus::Success {
                             continue;
                         }
 
