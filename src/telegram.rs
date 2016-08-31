@@ -44,7 +44,7 @@ impl TelegramCredentials {
                             Some(text) => text,
                             None => "".to_owned()
                         };
-                        let message_text = format!("⚠ Tests for Pull Request #{} has failed\n{}\n{}\nBy {}\n{}\n{}",
+                        let message_text = format!("⚠ Tests for Pull Request #{} have failed\n{}\n{}\nBy {}\n{}\n{}",
                             pr.id, status_text, pr.title, pr.author.name, pr.web_url, build.web_url);
 
                         Self::send_message(&api, room, message_text);
