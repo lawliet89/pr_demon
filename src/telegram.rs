@@ -1,9 +1,10 @@
 use std::sync::mpsc::Receiver;
 use std::thread;
 use std::time;
+use std::sync::Arc;
+use std::ops::Deref;
 use telegram_bot;
 use rustc_serialize::{json, Decodable};
-
 use fanout::{Message, OpCode, JsonDictionary};
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
@@ -14,7 +15,7 @@ pub struct TelegramCredentials {
 }
 
 impl TelegramCredentials {
-    pub fn announce_from(&self, subscriber: Receiver<Message>, shortener: Option<&::Shortener>) -> Result<(), String> {
+    pub fn announce_from(&self, subscriber: Receiver<Message>, shortener: Arc<Option<::Shortener>>) -> Result<(), String> {
         let api = match telegram_bot::Api::from_token(self.api_token.as_str()) {
             Ok(x) => x,
             Err(err) => return Err(format!("{}", err))
@@ -24,6 +25,7 @@ impl TelegramCredentials {
 
         thread::spawn(move || {
             let telegram_sleep_duration = time::Duration::new(1, 0);
+            let shortener = shortener.deref();
             for message in subscriber.iter() {
                 match message.opcode {
                     OpCode::Custom { payload: ref custom_payload }
@@ -45,8 +47,8 @@ impl TelegramCredentials {
                             None => "".to_owned()
                         };
 
-                        let pr_url = pr.web_url;
-                        let build_url = build.web_url;
+                        let pr_url = Self::shorten(&pr.web_url, shortener);
+                        let build_url = Self::shorten(&build.web_url, shortener);
 
                         let message_text = format!("⚠ Tests for Pull Request #{} have failed\n{}\n{}\nBy {}\n{}\n{}",
                             pr.id, status_text, pr.title, pr.author.name, pr_url, build_url);
@@ -72,6 +74,19 @@ impl TelegramCredentials {
         match dictionary.get::<T>(key) {
             Some(Ok(result)) => Ok(result),
             _ => Err(())
+        }
+    }
+
+    fn shorten(url: &str, shortener: &Option<&::Shortener>) -> String {
+        const MAX_LENGTH : usize = 50;
+
+        if let None = shortener {
+            return String::from(url);
+        }
+
+        match url.len() {
+            0 ... MAX_LENGTH => String::from(url),
+            _ =>  String::from(url)
         }
     }
 }

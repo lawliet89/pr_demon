@@ -17,6 +17,7 @@ use std::io::{self, Read};
 use std::iter;
 use std::boxed::Box;
 use std::thread;
+use std::sync::Arc;
 use rustc_serialize::json;
 use fanout::{Fanout, Message, OpCode};
 
@@ -137,14 +138,14 @@ fn main() {
         Some(key) => Some(goo_gl::GooGl::new(&key))
     };
 
-    if let Some(t) = config.telegram {
-        let shortener = match goo_gl {
-            None => None,
-            Some(ref shortener) => Some(shortener as &Shortener)
-        };
+    let shortener = Arc::new(match goo_gl {
+        None => None,
+        Some(ref shortener) => Some(shortener as Shortener)
+    });
 
+    if let Some(t) = config.telegram {
         if t.enabled {
-            t.announce_from(fanout.subscribe(), shortener).expect("Failed to authenticate with Telegram");
+            t.announce_from(fanout.subscribe(), shortener.clone()).expect("Failed to authenticate with Telegram");
         }
     }
 
