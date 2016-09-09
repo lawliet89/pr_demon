@@ -14,7 +14,7 @@ pub struct TelegramCredentials {
 }
 
 impl TelegramCredentials {
-    pub fn announce_from(&self, subscriber: Receiver<Message>) -> Result<(), String> {
+    pub fn announce_from(&self, subscriber: Receiver<Message>, shortener: Option<&::Shortener>) -> Result<(), String> {
         let api = match telegram_bot::Api::from_token(self.api_token.as_str()) {
             Ok(x) => x,
             Err(err) => return Err(format!("{}", err))
@@ -44,8 +44,12 @@ impl TelegramCredentials {
                             Some(text) => text,
                             None => "".to_owned()
                         };
+
+                        let pr_url = pr.web_url;
+                        let build_url = build.web_url;
+
                         let message_text = format!("⚠ Tests for Pull Request #{} have failed\n{}\n{}\nBy {}\n{}\n{}",
-                            pr.id, status_text, pr.title, pr.author.name, pr.web_url, build.web_url);
+                            pr.id, status_text, pr.title, pr.author.name, pr_url, build_url);
 
                         Self::send_message(&api, room, message_text);
                         thread::sleep(telegram_sleep_duration);

@@ -9,6 +9,7 @@ mod fanout;
 mod rest;
 mod teamcity;
 mod telegram;
+mod goo_gl;
 
 use std::env;
 use std::fs::File;
@@ -101,6 +102,10 @@ pub trait ContinuousIntegrator {
     fn queue_build(&self, branch: &str) -> Result<BuildDetails, String>;
 }
 
+pub trait Shortener {
+    fn shorten(&self, url: &str) -> Result<String, String>;
+}
+
 fn main() {
     let config_path = match env::args().nth(1) {
         Some(x) => x,
@@ -127,9 +132,19 @@ fn main() {
         });
     }
 
+    let goo_gl = match config.googl_key {
+        None => None,
+        Some(key) => Some(goo_gl::GooGl::new(&key))
+    };
+
     if let Some(t) = config.telegram {
+        let shortener = match goo_gl {
+            None => None,
+            Some(ref shortener) => Some(shortener as &Shortener)
+        };
+
         if t.enabled {
-            t.announce_from(fanout.subscribe()).expect("Failed to authenticate with Telegram");
+            t.announce_from(fanout.subscribe(), shortener).expect("Failed to authenticate with Telegram");
         }
     }
 
