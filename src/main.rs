@@ -25,7 +25,8 @@ struct Config { // TODO: Rename fields
     bitbucket: bitbucket::BitbucketCredentials,
     telegram: Option<telegram::TelegramCredentials>,
     run_interval: u64,
-    stdout_broadcast: Option<bool>
+    stdout_broadcast: Option<bool>,
+    googl_key: Option<String>
 }
 
 pub trait UsernameAndPassword {
@@ -494,7 +495,8 @@ mod tests {
                 room: -1234567890i64
             }),
             run_interval: 999,
-            stdout_broadcast: Some(false)
+            stdout_broadcast: Some(false),
+            googl_key: Some("some-api-key".to_owned())
         };
 
         let json_string = read_config("tests/fixtures/config.json", Cursor::new("")).unwrap();
