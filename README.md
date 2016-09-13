@@ -1,4 +1,4 @@
-# pr_demon ![Build status](https://travis-ci.org/lawliet89/pr_demon.svg)
+# pr_demon [![Build Status](https://travis-ci.org/lawliet89/pr_demon.svg?branch=master)](https://travis-ci.org/lawliet89/pr_demon)
 A daemon to monitor pull requests (PR) from Bitbucket and trigger builds for the PR on Teamcity.
 
 ## Configuration
