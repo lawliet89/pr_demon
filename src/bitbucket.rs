@@ -2,10 +2,12 @@ use std::collections::BTreeMap;
 use std::vec::Vec;
 use std::option::Option;
 
-use ::rest;
-use ::fanout;
 use hyper;
 use rustc_serialize::{json, Encodable};
+
+use ::fanout;
+use ::json_dictionary;
+use ::rest;
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
@@ -303,7 +305,7 @@ impl Bitbucket {
             }
         };
 
-        let mut event_payload = fanout::JsonDictionary::new();
+        let mut event_payload = json_dictionary::JsonDictionary::new();
         event_payload.insert("pr", &pr).expect("PR should be RustcEncodable");
         event_payload.insert("build", &build).expect("Build should be RustcEncodable");
 

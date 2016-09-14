@@ -4,7 +4,8 @@ use std::time;
 use telegram_bot;
 use rustc_serialize::{json, Decodable};
 
-use fanout::{Message, OpCode, JsonDictionary};
+use fanout::{Message, OpCode};
+use json_dictionary::JsonDictionary;
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct TelegramCredentials {
