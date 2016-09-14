@@ -101,22 +101,11 @@ pub trait ContinuousIntegrator {
 }
 
 fn main() {
-    let config_path = match env::args().nth(1) {
-        Some(x) => x,
-        None => panic!("Usage ./pr_demon path_to_config.json (Use - to read from stdin)")
-    };
-    let config_json = match read_config(&config_path, io::stdin()) {
-        Ok(x) => x,
-        Err(err) => panic!(err)
-    };
-
-    let config = match parse_config(&config_json) {
-        Ok(x) => x,
-        Err(err) => panic!(err)
-    };
+    let config_path = env::args().nth(1).expect("Usage ./pr_demon path_to_config.json (Use - to read from stdin)");
+    let config_json = read_config(&config_path, io::stdin()).unwrap();
+    let config = parse_config(&config_json).unwrap();
 
     let mut fanout = Fanout::<Message>::new();
-
     if let Some(true) = config.stdout_broadcast {
         let subscriber = fanout.subscribe();
         thread::spawn(move || {
@@ -126,15 +115,13 @@ fn main() {
         });
     }
 
-    if let Some(t) = config.telegram {
+    let sleep_duration = std::time::Duration::new(config.run_interval, 0);
+    let bitbucket = bitbucket::Bitbucket::new(&config.bitbucket, &fanout);
+    if let Some(t) = config.clone().telegram {
         if t.enabled {
             t.announce_from(fanout.subscribe()).expect("Failed to authenticate with Telegram");
         }
     }
-
-    let bitbucket = bitbucket::Bitbucket::new(&config.bitbucket, &fanout);
-
-    let sleep_duration = std::time::Duration::new(config.run_interval, 0);
 
     loop {
         let pull_requests = match bitbucket.get_pr_list() {
@@ -142,58 +129,20 @@ fn main() {
                 println!("{}Error getting Pull Requests: {}", prefix(0), err);
                 continue;
             },
-            Ok(x) => x
+            Ok(prs) => {
+                println!("{}{} Open Pull Requests Found", prefix(0), prs.len());
+                prs
+            }
         };
 
-        println!("{}{} Open Pull Requests Found", prefix(0), pull_requests.len());
-
         for pr in &pull_requests {
-            fanout.broadcast(&Message::new(OpCode::OpenPullRequest, &pr));
             println!("{}Pull Request #{} ({})", prefix(1), pr.id, pr.web_url);
-            match get_latest_build(&pr, &config.teamcity) {
-                None => {
-                    fanout.broadcast(&Message::new(OpCode::BuildNotFound, &pr));
-                    match schedule_build(&pr, &config.teamcity, &bitbucket) {
-                        Err(err) => println!("{}{}", prefix(2), err),
-                        Ok(build) => {
-                            fanout.broadcast(&Message::new(OpCode::BuildScheduled, &build));
-                        }
-                    }
-                },
-                Some(build) =>  {
-                    fanout.broadcast(&Message::new(OpCode::BuildFound, &build));
-                    match check_build_status(&pr, &build, &bitbucket) {
-                        Err(err) => println!("{}{}", prefix(2), err),
-                        Ok(build_status_tuple) => {
-                            let (build_state, build_status) = build_status_tuple;
-                            let opcode = match build_state {
-                                BuildState::Queued => OpCode::BuildQueued,
-                                BuildState::Running => OpCode::BuildRunning,
-                                BuildState::Finished => {
-                                    let success = match build_status {
-                                        BuildStatus::Success => true,
-                                        _ => false
-                                    };
-                                    OpCode::BuildFinished { success: success }
-                                }
-                            };
-                            fanout.broadcast(&Message::new(opcode, &build));
-                        }
-                    }
-                }
-            };
+            if let Err(handled_pr) = handle_pull_request(pr, &bitbucket, &config, &fanout) {
+                println!("{}{}", prefix(2), handled_pr);
+            }
+            std::thread::sleep(sleep_duration);
         }
-        std::thread::sleep(sleep_duration);
     }
-}
-
-fn format_time() -> String {
-    time::strftime("%Y-%m-%d %T %z", &time::now()).unwrap()
-}
-
-fn prefix(x: usize) -> String {
-    // https://stackoverflow.com/questions/31216646/repeat-string-with-integer-multiplication
-    format!("[{}]{} ", format_time(), iter::repeat("    ").take(x).collect::<String>())
 }
 
 fn read_config<R>(path: &str, reader: R) -> Result<String, String>
@@ -283,6 +232,34 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
     }
 }
 
+fn handle_pull_request(pr: &PullRequest, repo: &Repository, config: &Config, fanout: &Fanout<Message>) -> Result<(), String> {
+    fanout.broadcast(&Message::new(OpCode::OpenPullRequest, &pr));
+
+    match get_latest_build(&pr, &config.teamcity) {
+        None => {
+            fanout.broadcast(&Message::new(OpCode::BuildNotFound, &pr));
+            schedule_build(&pr, &config.teamcity, repo)
+                .and_then(|build| {
+                    fanout.broadcast(&Message::new(OpCode::BuildScheduled, &build));
+                    Ok(())
+                })
+        },
+        Some(build) => {
+            fanout.broadcast(&Message::new(OpCode::BuildFound, &build));
+            check_build_status(&pr, &build, repo)
+                .and_then(|(build_state, build_status)| {
+                    let opcode = match build_state {
+                        BuildState::Queued => OpCode::BuildQueued,
+                        BuildState::Running => OpCode::BuildRunning,
+                        BuildState::Finished => OpCode::BuildFinished { success: build_status == BuildStatus::Success }
+                    };
+                    fanout.broadcast(&Message::new(opcode, &build));
+                    Ok(())
+                })
+        }
+    }
+}
+
 fn schedule_build(pr: &PullRequest, ci: &ContinuousIntegrator, repo: &Repository)
     -> Result<BuildDetails, String> {
     println!("{}Scheduling build", prefix(2));
@@ -294,10 +271,7 @@ fn schedule_build(pr: &PullRequest, ci: &ContinuousIntegrator, repo: &Repository
         },
         Ok(queued) => {
             println!("{}Build Queued: {}", prefix(2), queued.web_url);
-            match repo.build_queued(&pr, &queued) {
-                Ok(_) => Ok(queued),
-                Err(err) => Err(err)
-            }
+            repo.build_queued(&pr, &queued).and(Ok(queued))
         }
     }
 }
@@ -307,32 +281,20 @@ fn check_build_status(pr: &PullRequest, build: &BuildDetails, repo: &Repository)
     println!("{}Build exists: {}", prefix(2), build.web_url);
     match build.state {
         BuildState::Finished => match build.status {
-            BuildStatus::Success => {
-                match repo.build_success(&pr, &build) {
-                    Ok(_) => Ok((BuildState::Finished, BuildStatus::Success)),
-                    Err(err) => Err(err)
-                }
-            },
-            ref status @ _  => {
-                match repo.build_failure(&pr, &build) {
-                    Ok(_) => Ok((BuildState::Finished, status.to_owned())),
-                    Err(err) => Err(err)
-                }
-            }
+            BuildStatus::Success => repo.build_success(&pr, &build).and(Ok((BuildState::Finished, BuildStatus::Success))),
+            ref status @ _  => repo.build_failure(&pr, &build).and(Ok((BuildState::Finished, status.to_owned())))
         },
-        BuildState::Running => {
-            match repo.build_running(&pr, &build) {
-                Ok(_) => Ok((BuildState::Running, build.status.to_owned())),
-                Err(err) => Err(err)
-            }
-        },
-        BuildState::Queued  => {
-            match repo.build_queued(&pr, &build) {
-                Ok(_) => Ok((BuildState::Queued, build.status.to_owned())),
-                Err(err) => Err(err)
-            }
-        }
+        BuildState::Running => repo.build_running(&pr, &build).and(Ok((BuildState::Running, build.status.to_owned()))),
+        BuildState::Queued  => repo.build_queued(&pr, &build).and(Ok((BuildState::Queued, build.status.to_owned())))
     }
+}
+
+fn format_time() -> String {
+    time::strftime("%Y-%m-%d %T %z", &time::now()).unwrap()
+}
+
+fn prefix(x: usize) -> String {
+    format!("[{}]{} ", format_time(), iter::repeat("    ").take(x).collect::<String>())
 }
 
 #[cfg(test)]
@@ -349,10 +311,12 @@ mod tests {
         build: Result<BuildDetails, String>,
         queued: Result<BuildDetails, String>
     }
+
     impl ContinuousIntegrator for StubBuild {
         fn get_build_list(&self, _: &str) -> Result<Vec<Build>, String> {
            self.build_list.clone().to_owned()
         }
+
         fn get_build(&self, _: i32) -> Result<BuildDetails, String> {
            self.build.clone().to_owned()
         }
@@ -374,15 +338,19 @@ mod tests {
         fn get_pr_list(&self) -> Result<Vec<PullRequest>, String> {
             self.pr_list.clone().to_owned()
         }
+
         fn build_queued(&self, _: &PullRequest, _: &BuildDetails) -> Result<(), String> {
             self.queued.clone().to_owned()
         }
+
         fn build_running(&self, _: &PullRequest, _: &BuildDetails) -> Result<(), String> {
             self.running.clone().to_owned()
         }
+
         fn build_success(&self, _: &PullRequest, _: &BuildDetails) -> Result<(), String> {
             self.success.clone().to_owned()
         }
+
         fn build_failure(&self, _: &PullRequest, _: &BuildDetails) -> Result<(), String> {
             self.failure.clone().to_owned()
         }
@@ -507,7 +475,7 @@ mod tests {
     fn get_latest_build_returns_latest_buiild_successfully() {
         let expected = &build_success();
         let stub_build = StubBuild {
-            build_list: Ok(vec![Build { id: 213232321 }, Build { id: 21323232}]),
+            build_list: Ok(vec![Build { id: 213232321 }, Build { id: 21323232 }]),
             build: Ok(expected.to_owned()),
             queued: Err("This does not matter".to_owned())
         };
@@ -533,7 +501,7 @@ mod tests {
         build.commit = Some("foobar".to_owned());
 
         let stub_build = StubBuild {
-            build_list: Ok(vec![Build { id: 213232321 }, Build { id: 21323232}]),
+            build_list: Ok(vec![Build { id: 213232321 }, Build { id: 21323232 }]),
             build: Ok(build.to_owned()),
             queued: Err("This does not matter".to_owned())
         };
@@ -546,7 +514,7 @@ mod tests {
     fn get_latest_build_returns_build_if_build_queued() {
         let expected = &build_queuing();
         let stub_build = StubBuild {
-            build_list: Ok(vec![Build { id: 213232321 }, Build { id: 21323232}]),
+            build_list: Ok(vec![Build { id: 213232321 }, Build { id: 21323232 }]),
             build: Ok(expected.to_owned()),
             queued: Err("This does not matter".to_owned())
         };
@@ -570,7 +538,7 @@ mod tests {
     #[test]
     fn get_latest_build_returns_none_for_error_fetching_build() {
         let stub_build = StubBuild {
-            build_list: Ok(vec![Build { id: 213232321 }, Build { id: 21323232}]),
+            build_list: Ok(vec![Build { id: 213232321 }, Build { id: 21323232 }]),
             build: Err("foobar".to_owned()),
             queued: Err("This does not matter".to_owned())
         };
@@ -585,7 +553,7 @@ mod tests {
         build.commit = None;
 
         let stub_build = StubBuild {
-            build_list: Ok(vec![Build { id: 213232321 }, Build { id: 21323232}]),
+            build_list: Ok(vec![Build { id: 213232321 }, Build { id: 21323232 }]),
             build: Ok(build.to_owned()),
             queued: Err("This does not matter".to_owned())
         };
