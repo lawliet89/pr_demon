@@ -6,6 +6,7 @@ extern crate url;
 
 mod bitbucket;
 mod fanout;
+mod json_dictionary;
 mod rest;
 mod teamcity;
 mod telegram;
