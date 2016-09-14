@@ -137,7 +137,7 @@ fn main() {
 
         for pr in &pull_requests {
             println!("{}Pull Request #{} ({})", prefix(1), pr.id, pr.web_url);
-            if let Err(handled_pr) = handle_pull_request(pr, &bitbucket, &config, &fanout) {
+            if let Err(handled_pr) = handle_pull_request(pr, &bitbucket, &config.teamcity, &fanout) {
                 println!("{}{}", prefix(2), handled_pr);
             }
             std::thread::sleep(sleep_duration);
@@ -232,13 +232,13 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
     }
 }
 
-fn handle_pull_request(pr: &PullRequest, repo: &Repository, config: &Config, fanout: &Fanout<Message>) -> Result<(), String> {
+fn handle_pull_request(pr: &PullRequest, repo: &Repository, ci: &ContinuousIntegrator, fanout: &Fanout<Message>) -> Result<(), String> {
     fanout.broadcast(&Message::new(OpCode::OpenPullRequest, &pr));
 
-    match get_latest_build(&pr, &config.teamcity) {
+    match get_latest_build(&pr, ci) {
         None => {
             fanout.broadcast(&Message::new(OpCode::BuildNotFound, &pr));
-            schedule_build(&pr, &config.teamcity, repo)
+            schedule_build(&pr, ci, repo)
                 .and_then(|build| {
                     fanout.broadcast(&Message::new(OpCode::BuildScheduled, &build));
                     Ok(())
