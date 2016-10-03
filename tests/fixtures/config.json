@@ -18,6 +18,9 @@
     "api_token": "XXX:XXXX",
     "room": "-1234567890"
   },
-  "run_interval": 999,
+  "run_interval": {
+    "variant": "Fixed",
+    "fields": [999]
+  },
   "stdout_broadcast": false
 }

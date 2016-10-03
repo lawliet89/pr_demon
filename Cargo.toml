@@ -13,6 +13,8 @@ rustc-serialize = "*"
 telegram-bot = "0.4"
 time = "*"
 url = "*"
+cron = "0.0.2"
+chrono = "*"
 
 [dev-dependencies]
 timebomb = "*"

@@ -3,6 +3,8 @@ extern crate rustc_serialize;
 extern crate telegram_bot;
 extern crate time;
 extern crate url;
+extern crate cron;
+extern crate chrono;
 
 mod bitbucket;
 mod fanout;
@@ -19,14 +21,22 @@ use std::boxed::Box;
 use std::thread;
 use rustc_serialize::json;
 use fanout::{Fanout, Message, OpCode};
+use cron::CronSchedule;
+use chrono::*;
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 struct Config { // TODO: Rename fields
     teamcity: teamcity::TeamcityCredentials,
     bitbucket: bitbucket::BitbucketCredentials,
     telegram: Option<telegram::TelegramCredentials>,
-    run_interval: u64,
+    run_interval: Interval,
     stdout_broadcast: Option<bool>
+}
+
+#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+enum Interval {
+    Cron { expression: String },
+    Fixed { interval: u64 }
 }
 
 pub trait UsernameAndPassword {
@@ -116,13 +126,24 @@ fn main() {
         });
     }
 
-    let sleep_duration = std::time::Duration::new(config.run_interval, 0);
     let bitbucket = bitbucket::Bitbucket::new(&config.bitbucket, &fanout);
     if let Some(t) = config.clone().telegram {
         if t.enabled {
             t.announce_from(fanout.subscribe()).expect("Failed to authenticate with Telegram");
         }
     }
+
+    let mut fixed_interval: Option<std::time::Duration> = None;
+    let mut schedule: Option<CronSchedule> = None;
+
+    match config.run_interval {
+        Interval::Cron { expression } => {
+            schedule = Some(CronSchedule::parse(expression).unwrap())
+        },
+        Interval::Fixed { interval } => {
+            fixed_interval = Some(std::time::Duration::new(interval, 0))
+        }
+    };
 
     loop {
         let pull_requests = match bitbucket.get_pr_list() {
@@ -141,6 +162,12 @@ fn main() {
             if let Err(handled_pr) = handle_pull_request(pr, &bitbucket, &config.teamcity, &fanout) {
                 println!("{}{}", prefix(2), handled_pr);
             }
+
+            let sleep_duration = match schedule {
+                Some(ref sch) => (sch.next_utc().unwrap() - UTC::now()).to_std().unwrap(),
+                None => {fixed_interval.unwrap()}
+            };
+
             std::thread::sleep(sleep_duration);
         }
     }
@@ -300,7 +327,7 @@ fn prefix(x: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{bitbucket, teamcity, telegram, Config, PullRequest, ContinuousIntegrator, Build};
+    use super::{bitbucket, teamcity, telegram, Config, Interval, PullRequest, ContinuousIntegrator, Build};
     use super::{BuildDetails, BuildStatus, BuildState, Repository, User};
     use super::{read_config, parse_config, get_latest_build, schedule_build};
     use super::{check_build_status};
@@ -442,6 +469,7 @@ mod tests {
 
     #[test]
     fn it_reads_and_parses_a_config_file() {
+
         let expected = Config {
             bitbucket: bitbucket::BitbucketCredentials {
                 username: "username".to_owned(),
@@ -462,7 +490,7 @@ mod tests {
                 api_token: "XXX:XXXX".to_owned(),
                 room: -1234567890i64
             }),
-            run_interval: 999,
+            run_interval: Interval::Fixed{interval: 999u64},
             stdout_broadcast: Some(false)
         };
 
