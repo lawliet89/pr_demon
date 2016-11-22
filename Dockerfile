@@ -1,4 +1,4 @@
-FROM lawliet89/debian-rust:1.12.0
+FROM lawliet89/debian-rust:1.13.0
 MAINTAINER Yong Wen Chua <me@yongwen.xyz>
 
 COPY Cargo.toml Cargo.lock ./

@@ -186,7 +186,7 @@ pub struct Agent {
 pub struct TestOccurences {
     pub count: i32,
     pub href: String,
-    pub passed: i32,
+    pub passed: Option<i32>,
     pub ignored: Option<i32>,
     pub default: bool
 }
