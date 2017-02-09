@@ -60,7 +60,7 @@ impl TelegramCredentials {
 
     fn send_message(api: &telegram_bot::Api, room: i64, message: String) {
         if let Err(err) = api.send_message(room, message, None, None, None, None) {
-            println!("{}", err)
+            error!("{}", err)
         }
     }
 

@@ -155,7 +155,7 @@ fn main() {
     if let Some(true) = config.stdout_broadcast {
         let subscriber = fanout.subscribe();
         thread::spawn(move || for message in subscriber.iter() {
-            println!("Fanout broadcast received: {:?} {}",
+            info!("Fanout broadcast received: {:?} {}",
                      message.opcode,
                      message.payload)
         });
@@ -179,19 +179,19 @@ fn main() {
     loop {
         let pull_requests = match bitbucket.get_pr_list() {
             Err(err) => {
-                println!("{}Error getting Pull Requests: {}", prefix(0), err);
+                error!("{}Error getting Pull Requests: {}", prefix(0), err);
                 continue;
             }
             Ok(prs) => {
-                println!("{}{} Open Pull Requests Found", prefix(0), prs.len());
+                info!("{}{} Open Pull Requests Found", prefix(0), prs.len());
                 prs
             }
         };
 
         for pr in &pull_requests {
-            println!("{}Pull Request #{} ({})", prefix(1), pr.id, pr.web_url);
+            info!("{}Pull Request #{} ({})", prefix(1), pr.id, pr.web_url);
             if let Err(handled_pr) = handle_pull_request(pr, &bitbucket, &config.teamcity, &fanout) {
-                println!("{}{}", prefix(2), handled_pr);
+                error!("{}{}", prefix(2), handled_pr);
             }
 
             let sleep_duration = match schedule {
@@ -228,24 +228,24 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
     let branch_name = pr.branch_name();
     let pr_commit = &pr.from_commit;
 
-    println!("{}Branch: {}", prefix(2), branch_name);
-    println!("{}Commit: {}", prefix(2), pr_commit);
-    println!("{}Finding latest build from branch", prefix(2));
+    info!("{}Branch: {}", prefix(2), branch_name);
+    info!("{}Commit: {}", prefix(2), pr_commit);
+    info!("{}Finding latest build from branch", prefix(2));
 
     let latest_build = match ci.get_build_list(&branch_name) {
         Ok(ref build_list) => {
             if build_list.is_empty() {
-                println!("{}Build does not exist -- running build", prefix(2));
+                info!("{}Build does not exist -- running build", prefix(2));
                 None
             } else {
                 let latest_build_id = build_list.first().unwrap().id;
                 match ci.get_build(latest_build_id) {
                     Ok(build) => {
-                        println!("{}Latest Build Found {}", prefix(2), build.web_url);
+                        info!("{}Latest Build Found {}", prefix(2), build.web_url);
                         Some(build)
                     }
                     Err(err) => {
-                        println!("{}Unable to retrieve information for build ID {}: {}",
+                        error!("{}Unable to retrieve information for build ID {}: {}",
                                  prefix(2),
                                  latest_build_id,
                                  err);
@@ -255,7 +255,7 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
             }
         }
         Err(err) => {
-            println!("{}Error fetching builds -- queuing anyway: {}",
+            warn!("{}Error fetching builds -- queuing anyway: {}",
                      prefix(2),
                      err);
             None
@@ -268,21 +268,21 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
             match build.commit {
                 Some(ref commit) => {
                     if commit == pr_commit {
-                        println!("{}Commit matches -- skipping", prefix(2));
+                        info!("{}Commit matches -- skipping", prefix(2));
                         Some(build.to_owned())
                     } else {
-                        println!("{}Commit does not match with {} -- scheduling build",
+                        info!("{}Commit does not match with {} -- scheduling build",
                                  prefix(2),
                                  commit);
                         None
                     }
                 }
                 None if build.state == BuildState::Queued => {
-                    println!("{}Build is queued -- skipping", prefix(2));
+                    info!("{}Build is queued -- skipping", prefix(2));
                     Some(build.to_owned())
                 }
                 _ => {
-                    println!("{}Unknown error -- scheduling build", prefix(2));
+                    warn!("{}Unknown error -- scheduling build", prefix(2));
                     None
                 }
             }
@@ -321,15 +321,15 @@ fn handle_pull_request(pr: &PullRequest,
 }
 
 fn schedule_build(pr: &PullRequest, ci: &ContinuousIntegrator, repo: &Repository) -> Result<BuildDetails, String> {
-    println!("{}Scheduling build", prefix(2));
+    info!("{}Scheduling build", prefix(2));
     let queued_build = ci.queue_build(&pr.branch_name());
     match queued_build {
         Err(err) => {
-            println!("{}Error queuing build: {}", prefix(2), err);
+            error!("{}Error queuing build: {}", prefix(2), err);
             Err(err)
         }
         Ok(queued) => {
-            println!("{}Build Queued: {}", prefix(2), queued.web_url);
+            info!("{}Build Queued: {}", prefix(2), queued.web_url);
             repo.build_queued(&pr, &queued).and(Ok(queued))
         }
     }
@@ -339,7 +339,7 @@ fn check_build_status(pr: &PullRequest,
                       build: &BuildDetails,
                       repo: &Repository)
                       -> Result<(BuildState, BuildStatus), String> {
-    println!("{}Build exists: {}", prefix(2), build.web_url);
+    info!("{}Build exists: {}", prefix(2), build.web_url);
     match build.state {
         BuildState::Finished => {
             match build.status {
@@ -354,14 +354,8 @@ fn check_build_status(pr: &PullRequest,
     }
 }
 
-fn format_time() -> String {
-    time::strftime("%Y-%m-%d %T %z", &time::now()).unwrap()
-}
-
 fn prefix(x: usize) -> String {
-    format!("[{}]{} ",
-            format_time(),
-            iter::repeat("    ").take(x).collect::<String>())
+    format!("{} ", iter::repeat("    ").take(x).collect::<String>())
 }
 
 fn to_option_str(opt: &Option<String>) -> Option<&str> {
