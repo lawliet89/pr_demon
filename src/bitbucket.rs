@@ -178,7 +178,7 @@ impl ::Repository for Bitbucket {
                           self.credentials.project_slug,
                           self.credentials.repo_slug);
 
-        let prs = rest::get::<PagedApi<PullRequest>>(&url, &headers.headers)
+        let prs = rest::get::<PagedApi<PullRequest>>(&url, headers.headers)
             .map_err(|err| format!("Error getting list of Pull Requests {}", err))?;
         Ok(prs.values
             .iter()
@@ -313,7 +313,7 @@ impl Bitbucket {
                           self.credentials.repo_slug,
                           pr_id);
 
-        let activities = rest::get::<PagedApi<Activity>>(&url, &headers.headers)
+        let activities = rest::get::<PagedApi<Activity>>(&url, headers.headers)
             .map_err(|err| format!("Error getting comments {}", err))?;
 
         Ok(activities.values
@@ -341,7 +341,7 @@ impl Bitbucket {
 
         Ok(rest::post::<Comment>(&url,
                                  &body,
-                                 &headers.headers,
+                                 headers.headers,
                                  &hyper::status::StatusCode::Created)
             .map_err(|err| format!("Error posting comment {}", err))?
             .to_owned())
@@ -365,10 +365,7 @@ impl Bitbucket {
                           pr_id,
                           comment.id);
 
-        Ok(rest::put::<Comment>(&url,
-                                &body,
-                                &headers.headers,
-                                &hyper::status::StatusCode::Ok)
+        Ok(rest::put::<Comment>(&url, &body, headers.headers, &hyper::status::StatusCode::Ok)
             .map_err(|err| format!("Error posting comment {}", err))?
             .to_owned())
 
@@ -388,9 +385,9 @@ impl Bitbucket {
                           pr.from_commit);
 
         let response =
-            rest::post_raw(&url, &body, &headers.headers).map_err(|err| format!("Error posting build {}", err))?;
-        match response.status {
-            ref status if status == &hyper::status::StatusCode::NoContent => Ok(bitbucket_build),
+            rest::post_raw(&url, &body, headers.headers).map_err(|err| format!("Error posting build {}", err))?;
+        match response.status() {
+            status if status == &hyper::status::StatusCode::NoContent => Ok(bitbucket_build),
             e @ _ => Err(e.to_string()),
         }
     }

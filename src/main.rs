@@ -5,6 +5,7 @@ extern crate fern;
 extern crate hyper;
 #[macro_use]
 extern crate log;
+extern crate reqwest;
 extern crate rustc_serialize;
 extern crate time;
 extern crate url;
@@ -192,7 +193,9 @@ fn main() {
             None => fixed_interval.unwrap(),
         };
 
-        info!("{} Sleeping for {} seconds", prefix(0), sleep_duration.as_secs());
+        info!("{} Sleeping for {} seconds",
+              prefix(0),
+              sleep_duration.as_secs());
         std::thread::sleep(sleep_duration);
     }
 }

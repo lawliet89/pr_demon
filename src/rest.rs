@@ -1,17 +1,18 @@
 use std::io::Read;
 use rustc_serialize::{json, Decodable};
-use hyper;
-use hyper::client::Client;
-use hyper::header::{Authorization, Basic, Accept, qitem, ContentType};
+use reqwest;
+use reqwest::{Client, Method, Error, Response, StatusCode};
+use reqwest::header::{Authorization, Basic, Accept, qitem, ContentType};
 use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 
+
 pub struct Headers {
-    pub headers: hyper::header::Headers,
+    pub headers: reqwest::header::Headers,
 }
 
 impl Headers {
     pub fn new() -> Headers {
-        Headers { headers: hyper::header::Headers::new() }
+        Headers { headers: reqwest::header::Headers::new() }
     }
 
     pub fn add_authorization_header(&mut self, credentials: &::UsernameAndPassword) -> &mut Headers {
@@ -44,81 +45,64 @@ impl Headers {
     }
 }
 
-pub fn get<T>(url: &str, headers: &hyper::header::Headers) -> Result<T, String>
+pub fn get<T>(url: &str, headers: reqwest::header::Headers) -> Result<T, String>
     where T: Decodable
 {
-    request(url,
-            hyper::method::Method::Get,
-            &None,
-            headers,
-            &hyper::status::StatusCode::Ok)
+    request(url, reqwest::Method::Get, &None, headers, &StatusCode::Ok)
 }
 
-pub fn post<T>(url: &str,
-               body: &str,
-               headers: &hyper::header::Headers,
-               status_code: &hyper::status::StatusCode)
-               -> Result<T, String>
+pub fn post<T>(url: &str, body: &str, headers: reqwest::header::Headers, status_code: &StatusCode) -> Result<T, String>
     where T: Decodable
 {
     request(url,
-            hyper::method::Method::Post,
+            reqwest::Method::Post,
             &Some(body.to_owned()),
             headers,
             status_code)
 }
 
-pub fn post_raw(url: &str,
-                body: &str,
-                headers: &hyper::header::Headers)
-                -> Result<hyper::client::response::Response, hyper::Error> {
-    request_raw(url,
-                hyper::method::Method::Post,
-                &Some(body.to_owned()),
-                headers)
+pub fn post_raw(url: &str, body: &str, headers: reqwest::header::Headers) -> Result<Response, Error> {
+    request_raw(url, reqwest::Method::Post, &Some(body.to_owned()), headers)
 }
 
-pub fn put<T>(url: &str,
-              body: &str,
-              headers: &hyper::header::Headers,
-              status_code: &hyper::status::StatusCode)
-              -> Result<T, String>
+pub fn put<T>(url: &str, body: &str, headers: reqwest::header::Headers, status_code: &StatusCode) -> Result<T, String>
     where T: Decodable
 {
     request(url,
-            hyper::method::Method::Put,
+            reqwest::Method::Put,
             &Some(body.to_owned()),
             headers,
             status_code)
 }
 
 fn request_raw(url: &str,
-               method: hyper::method::Method,
+               method: Method,
                body: &Option<String>,
-               headers: &hyper::header::Headers)
-               -> Result<hyper::client::response::Response, hyper::Error> {
-    let client = Client::new();
-    let client = client.request(method, url);
-    let client = match *body {
-        Some(ref body_content) => client.body(body_content),
-        None => client,
+               headers: reqwest::header::Headers)
+               -> Result<Response, Error> {
+    let client = Client::new()?;
+    let request_builder = client.request(method, url);
+    let request_builder = request_builder.headers(headers);
+
+    let request_builder = match *body {
+        Some(ref body_content) => request_builder.body(body_content.clone()),
+        None => request_builder,
     };
 
-    client.headers(headers.to_owned())
-        .send()
+    request_builder.send()
 }
 
 fn request<T>(url: &str,
-              method: hyper::method::Method,
+              method: reqwest::Method,
               body: &Option<String>,
-              headers: &hyper::header::Headers,
-              status_code: &hyper::status::StatusCode)
+              headers: reqwest::header::Headers,
+              status_code: &StatusCode)
               -> Result<T, String>
     where T: Decodable
 {
     let mut response = request_raw(url, method, body, headers).map_err(|err| err.to_string())?;
-    match response.status {
-        ref status if status == status_code => (),
+    match response.status() {
+        status if status == status_code => (),
         e @ _ => return Err(e.to_string()),
     };
 

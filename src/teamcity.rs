@@ -215,7 +215,7 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
                           self.build_id,
                           query_string);
 
-        let build_list = rest::get::<BuildList>(&url, &headers.headers)
+        let build_list = rest::get::<BuildList>(&url, headers.headers)
             .map_err(|err| format!("Error getting list of builds {}", err))?;
         Ok(match build_list.build {
             None => vec![],
@@ -234,7 +234,7 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
 
         let url = format!("{}/builds/id:{}", self.base_url, build_id);
 
-        let build = rest::get::<Build>(&url, &headers.headers).map_err(|err| format!("Error getting build {}", err))?;
+        let build = rest::get::<Build>(&url, headers.headers).map_err(|err| format!("Error getting build {}", err))?;
         Ok(build.to_build_details())
     }
 
@@ -256,7 +256,7 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
         let build =
             rest::post::<Build>(&url,
                                 &body,
-                                &headers.headers,
+                                headers.headers,
                                 &hyper::status::StatusCode::Ok).map_err(|err| format!("Error queuing build {}", err))?;
         Ok(build.to_build_details())
     }
