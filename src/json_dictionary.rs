@@ -3,14 +3,12 @@ use rustc_serialize::{json, Decodable, Encodable};
 
 #[derive(RustcDecodable, RustcEncodable, PartialEq, Debug, Clone)]
 pub struct JsonDictionary {
-    dictionary: BTreeMap<String, String>
+    dictionary: BTreeMap<String, String>,
 }
 
 impl JsonDictionary {
     pub fn new() -> JsonDictionary {
-        JsonDictionary {
-            dictionary: BTreeMap::new()
-        }
+        JsonDictionary { dictionary: BTreeMap::new() }
     }
 
     #[allow(dead_code)]
@@ -18,11 +16,13 @@ impl JsonDictionary {
         self.dictionary.clear();
     }
 
-    pub fn get<T>(&self, key: &str) -> Option<Result<T, json::DecoderError>> where T: Decodable {
+    pub fn get<T>(&self, key: &str) -> Option<Result<T, json::DecoderError>>
+        where T: Decodable
+    {
         let json = self.dictionary.get(key);
         match json {
             None => None,
-            Some(ref json) => Some(json::decode(json))
+            Some(ref json) => Some(json::decode(json)),
         }
     }
 
@@ -32,14 +32,15 @@ impl JsonDictionary {
     }
 
     #[allow(dead_code)]
-    pub fn insert<T>(&mut self, key: &str, value: &T)
-            -> Result<(), json::EncoderError> where T : Encodable {
+    pub fn insert<T>(&mut self, key: &str, value: &T) -> Result<(), json::EncoderError>
+        where T: Encodable
+    {
         match json::encode(value) {
             Ok(encoded) => {
                 self.dictionary.insert(key.to_owned(), encoded);
                 Ok(())
-            },
-            Err(err) => Err(err)
+            }
+            Err(err) => Err(err),
         }
     }
 
@@ -47,7 +48,7 @@ impl JsonDictionary {
     pub fn remove(&mut self, key: &str) -> bool {
         match self.dictionary.remove(key) {
             Some(_) => true,
-            None => false
+            None => false,
         }
     }
 
@@ -64,17 +65,17 @@ impl JsonDictionary {
 
 #[cfg(test)]
 mod json_dictionary_tests {
-    use super::{JsonDictionary};
+    use super::JsonDictionary;
     use rustc_serialize::{json, Decodable};
 
     #[derive(RustcDecodable, RustcEncodable, PartialEq, Debug)]
     struct Payload {
-        pub payload: String
+        pub payload: String,
     }
 
     #[derive(RustcDecodable, RustcEncodable, PartialEq, Debug)]
     struct OtherPayload {
-        pub other: String
+        pub other: String,
     }
 
     static EMPTY_JSON: &'static str = "{\"dictionary\":{}}";
@@ -90,11 +91,12 @@ mod json_dictionary_tests {
         dictionary
     }
 
-    fn unwrap_from_json_dictionary<T>(dictionary: &JsonDictionary, key: &str)
-         -> T where T : Decodable {
+    fn unwrap_from_json_dictionary<T>(dictionary: &JsonDictionary, key: &str) -> T
+        where T: Decodable
+    {
         match dictionary.get::<T>(key) {
             Some(Ok(result)) => result,
-            _ => panic!("Unable to unwrap object")
+            _ => panic!("Unable to unwrap object"),
         }
     }
 

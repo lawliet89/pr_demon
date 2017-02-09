@@ -25,18 +25,19 @@ use cron::CronSchedule;
 use chrono::*;
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
-struct Config { // TODO: Rename fields
+struct Config {
+    // TODO: Rename fields
     teamcity: teamcity::TeamcityCredentials,
     bitbucket: bitbucket::BitbucketCredentials,
     telegram: Option<telegram::TelegramCredentials>,
     run_interval: Interval,
-    stdout_broadcast: Option<bool>
+    stdout_broadcast: Option<bool>,
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 enum Interval {
     Cron { expression: String },
-    Fixed { interval: u64 }
+    Fixed { interval: u64 },
 }
 
 pub trait UsernameAndPassword {
@@ -51,7 +52,7 @@ pub struct PullRequest {
     pub from_ref: String,
     pub from_commit: String,
     pub title: String,
-    pub author: User
+    pub author: User,
 }
 
 impl PullRequest {
@@ -64,7 +65,7 @@ impl PullRequest {
 #[derive(RustcEncodable, RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct User {
     pub name: String,
-    pub email: String
+    pub email: String,
 }
 
 pub trait Repository {
@@ -77,21 +78,21 @@ pub trait Repository {
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct Build {
-    pub id: i32
+    pub id: i32,
 }
 
 #[derive(RustcEncodable, RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub enum BuildState {
     Queued,
     Finished,
-    Running
+    Running,
 }
 
 #[derive(RustcEncodable, RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub enum BuildStatus {
     Success,
     Failure,
-    Unknown
+    Unknown,
 }
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
@@ -102,7 +103,7 @@ pub struct BuildDetails {
     pub commit: Option<String>,
     pub state: BuildState,
     pub status: BuildStatus,
-    pub status_text: Option<String>
+    pub status_text: Option<String>,
 }
 
 pub trait ContinuousIntegrator {
@@ -119,10 +120,10 @@ fn main() {
     let mut fanout = Fanout::<Message>::new();
     if let Some(true) = config.stdout_broadcast {
         let subscriber = fanout.subscribe();
-        thread::spawn(move || {
-            for message in subscriber.iter() {
-                println!("Fanout broadcast received: {:?} {}", message.opcode, message.payload)
-            }
+        thread::spawn(move || for message in subscriber.iter() {
+            println!("Fanout broadcast received: {:?} {}",
+                     message.opcode,
+                     message.payload)
         });
     }
 
@@ -137,12 +138,8 @@ fn main() {
     let mut schedule: Option<CronSchedule> = None;
 
     match config.run_interval {
-        Interval::Cron { expression } => {
-            schedule = Some(CronSchedule::parse(expression).unwrap())
-        },
-        Interval::Fixed { interval } => {
-            fixed_interval = Some(std::time::Duration::new(interval, 0))
-        }
+        Interval::Cron { expression } => schedule = Some(CronSchedule::parse(expression).unwrap()),
+        Interval::Fixed { interval } => fixed_interval = Some(std::time::Duration::new(interval, 0)),
     };
 
     loop {
@@ -150,7 +147,7 @@ fn main() {
             Err(err) => {
                 println!("{}Error getting Pull Requests: {}", prefix(0), err);
                 continue;
-            },
+            }
             Ok(prs) => {
                 println!("{}{} Open Pull Requests Found", prefix(0), prs.len());
                 prs
@@ -165,7 +162,7 @@ fn main() {
 
             let sleep_duration = match schedule {
                 Some(ref sch) => (sch.next_utc().unwrap() - UTC::now()).to_std().unwrap(),
-                None => {fixed_interval.unwrap()}
+                None => fixed_interval.unwrap(),
             };
 
             std::thread::sleep(sleep_duration);
@@ -174,15 +171,14 @@ fn main() {
 }
 
 fn read_config<R>(path: &str, reader: R) -> Result<String, String>
-        where R : std::io::Read {
-    let mut file : Box<std::io::Read> = match path {
-        "-" => {
-            Box::new(reader)
-        },
+    where R: std::io::Read
+{
+    let mut file: Box<std::io::Read> = match path {
+        "-" => Box::new(reader),
         path @ _ => {
             match File::open(path) {
                 Ok(f) => Box::new(f),
-                Err(err) => return Err(format!("Unable to read file because: {}", err))
+                Err(err) => return Err(format!("Unable to read file because: {}", err)),
             }
         }
     };
@@ -190,14 +186,14 @@ fn read_config<R>(path: &str, reader: R) -> Result<String, String>
     let mut json = String::new();
     match file.read_to_string(&mut json) {
         Ok(_) => Ok(json),
-        Err(err) => Err(format!("Unable to read config: {}", err))
+        Err(err) => Err(format!("Unable to read config: {}", err)),
     }
 }
 
 fn parse_config(json: &str) -> Result<Config, String> {
     match json::decode(&json) {
         Ok(x) => Ok(x),
-        Err(err) => return Err(format!("Unable to decode JSON value {}", err))
+        Err(err) => return Err(format!("Unable to decode JSON value {}", err)),
     }
 }
 
@@ -217,19 +213,24 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
             } else {
                 let latest_build_id = build_list.first().unwrap().id;
                 match ci.get_build(latest_build_id) {
-                    Ok(build) =>  {
+                    Ok(build) => {
                         println!("{}Latest Build Found {}", prefix(2), build.web_url);
                         Some(build)
-                    },
+                    }
                     Err(err) => {
-                        println!("{}Unable to retrieve information for build ID {}: {}", prefix(2), latest_build_id, err);
+                        println!("{}Unable to retrieve information for build ID {}: {}",
+                                 prefix(2),
+                                 latest_build_id,
+                                 err);
                         None
                     }
                 }
             }
-        },
+        }
         Err(err) => {
-            println!("{}Error fetching builds -- queuing anyway: {}", prefix(2), err);
+            println!("{}Error fetching builds -- queuing anyway: {}",
+                     prefix(2),
+                     err);
             None
         }
     };
@@ -243,14 +244,16 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
                         println!("{}Commit matches -- skipping", prefix(2));
                         Some(build.to_owned())
                     } else {
-                        println!("{}Commit does not match with {} -- scheduling build", prefix(2), commit);
+                        println!("{}Commit does not match with {} -- scheduling build",
+                                 prefix(2),
+                                 commit);
                         None
                     }
-                },
+                }
                 None if build.state == BuildState::Queued => {
                     println!("{}Build is queued -- skipping", prefix(2));
                     Some(build.to_owned())
-                },
+                }
                 _ => {
                     println!("{}Unknown error -- scheduling build", prefix(2));
                     None
@@ -260,43 +263,44 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
     }
 }
 
-fn handle_pull_request(pr: &PullRequest, repo: &Repository, ci: &ContinuousIntegrator, fanout: &Fanout<Message>) -> Result<(), String> {
+fn handle_pull_request(pr: &PullRequest,
+                       repo: &Repository,
+                       ci: &ContinuousIntegrator,
+                       fanout: &Fanout<Message>)
+                       -> Result<(), String> {
     fanout.broadcast(&Message::new(OpCode::OpenPullRequest, &pr));
 
     match get_latest_build(&pr, ci) {
         None => {
             fanout.broadcast(&Message::new(OpCode::BuildNotFound, &pr));
-            schedule_build(&pr, ci, repo)
-                .and_then(|build| {
-                    fanout.broadcast(&Message::new(OpCode::BuildScheduled, &build));
-                    Ok(())
-                })
-        },
+            schedule_build(&pr, ci, repo).and_then(|build| {
+                fanout.broadcast(&Message::new(OpCode::BuildScheduled, &build));
+                Ok(())
+            })
+        }
         Some(build) => {
             fanout.broadcast(&Message::new(OpCode::BuildFound, &build));
-            check_build_status(&pr, &build, repo)
-                .and_then(|(build_state, build_status)| {
-                    let opcode = match build_state {
-                        BuildState::Queued => OpCode::BuildQueued,
-                        BuildState::Running => OpCode::BuildRunning,
-                        BuildState::Finished => OpCode::BuildFinished { success: build_status == BuildStatus::Success }
-                    };
-                    fanout.broadcast(&Message::new(opcode, &build));
-                    Ok(())
-                })
+            check_build_status(&pr, &build, repo).and_then(|(build_state, build_status)| {
+                let opcode = match build_state {
+                    BuildState::Queued => OpCode::BuildQueued,
+                    BuildState::Running => OpCode::BuildRunning,
+                    BuildState::Finished => OpCode::BuildFinished { success: build_status == BuildStatus::Success },
+                };
+                fanout.broadcast(&Message::new(opcode, &build));
+                Ok(())
+            })
         }
     }
 }
 
-fn schedule_build(pr: &PullRequest, ci: &ContinuousIntegrator, repo: &Repository)
-    -> Result<BuildDetails, String> {
+fn schedule_build(pr: &PullRequest, ci: &ContinuousIntegrator, repo: &Repository) -> Result<BuildDetails, String> {
     println!("{}Scheduling build", prefix(2));
     let queued_build = ci.queue_build(&pr.branch_name());
     match queued_build {
         Err(err) => {
             println!("{}Error queuing build: {}", prefix(2), err);
-            return Err(err)
-        },
+            return Err(err);
+        }
         Ok(queued) => {
             println!("{}Build Queued: {}", prefix(2), queued.web_url);
             repo.build_queued(&pr, &queued).and(Ok(queued))
@@ -304,16 +308,22 @@ fn schedule_build(pr: &PullRequest, ci: &ContinuousIntegrator, repo: &Repository
     }
 }
 
-fn check_build_status(pr: &PullRequest, build: &BuildDetails, repo: &Repository)
-    -> Result<(BuildState, BuildStatus), String> {
+fn check_build_status(pr: &PullRequest,
+                      build: &BuildDetails,
+                      repo: &Repository)
+                      -> Result<(BuildState, BuildStatus), String> {
     println!("{}Build exists: {}", prefix(2), build.web_url);
     match build.state {
-        BuildState::Finished => match build.status {
-            BuildStatus::Success => repo.build_success(&pr, &build).and(Ok((BuildState::Finished, BuildStatus::Success))),
-            ref status @ _  => repo.build_failure(&pr, &build).and(Ok((BuildState::Finished, status.to_owned())))
-        },
+        BuildState::Finished => {
+            match build.status {
+                BuildStatus::Success => {
+                    repo.build_success(&pr, &build).and(Ok((BuildState::Finished, BuildStatus::Success)))
+                }
+                ref status @ _ => repo.build_failure(&pr, &build).and(Ok((BuildState::Finished, status.to_owned()))),
+            }
+        }
         BuildState::Running => repo.build_running(&pr, &build).and(Ok((BuildState::Running, build.status.to_owned()))),
-        BuildState::Queued  => repo.build_queued(&pr, &build).and(Ok((BuildState::Queued, build.status.to_owned())))
+        BuildState::Queued => repo.build_queued(&pr, &build).and(Ok((BuildState::Queued, build.status.to_owned()))),
     }
 }
 
@@ -322,7 +332,9 @@ fn format_time() -> String {
 }
 
 fn prefix(x: usize) -> String {
-    format!("[{}]{} ", format_time(), iter::repeat("    ").take(x).collect::<String>())
+    format!("[{}]{} ",
+            format_time(),
+            iter::repeat("    ").take(x).collect::<String>())
 }
 
 #[cfg(test)]
@@ -330,27 +342,27 @@ mod tests {
     use super::{bitbucket, teamcity, telegram, Config, Interval, PullRequest, ContinuousIntegrator, Build};
     use super::{BuildDetails, BuildStatus, BuildState, Repository, User};
     use super::{read_config, parse_config, get_latest_build, schedule_build};
-    use super::{check_build_status};
+    use super::check_build_status;
     use std::fs::File;
     use std::io::{Read, Cursor};
 
     struct StubBuild {
         build_list: Result<Vec<Build>, String>,
         build: Result<BuildDetails, String>,
-        queued: Result<BuildDetails, String>
+        queued: Result<BuildDetails, String>,
     }
 
     impl ContinuousIntegrator for StubBuild {
         fn get_build_list(&self, _: &str) -> Result<Vec<Build>, String> {
-           self.build_list.clone().to_owned()
+            self.build_list.clone().to_owned()
         }
 
         fn get_build(&self, _: i32) -> Result<BuildDetails, String> {
-           self.build.clone().to_owned()
+            self.build.clone().to_owned()
         }
 
         fn queue_build(&self, _: &str) -> Result<BuildDetails, String> {
-           self.queued.clone().to_owned()
+            self.queued.clone().to_owned()
         }
     }
 
@@ -359,7 +371,7 @@ mod tests {
         queued: Result<(), String>,
         running: Result<(), String>,
         success: Result<(), String>,
-        failure: Result<(), String>
+        failure: Result<(), String>,
     }
 
     impl Repository for StubRepository {
@@ -393,8 +405,8 @@ mod tests {
             title: "A very important PR".to_owned(),
             author: User {
                 name: "Aaron Xiao Ming".to_owned(),
-                email: "aaron@xiao.ming".to_owned()
-            }
+                email: "aaron@xiao.ming".to_owned(),
+            },
         }
     }
 
@@ -406,7 +418,7 @@ mod tests {
             commit: Some("363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned()),
             state: BuildState::Finished,
             status: BuildStatus::Success,
-            status_text: Some("Build passed with flying colours".to_owned())
+            status_text: Some("Build passed with flying colours".to_owned()),
         }
     }
 
@@ -418,7 +430,7 @@ mod tests {
             commit: Some("363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned()),
             state: BuildState::Queued,
             status: BuildStatus::Unknown,
-            status_text: None
+            status_text: None,
         }
     }
 
@@ -430,7 +442,7 @@ mod tests {
             commit: Some("363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned()),
             state: BuildState::Running,
             status: BuildStatus::Success,
-            status_text: None
+            status_text: None,
         }
     }
 
@@ -443,7 +455,7 @@ mod tests {
             commit: Some("363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned()),
             state: BuildState::Finished,
             status: BuildStatus::Failure,
-            status_text: Some("Build failed with walking monochrome".to_owned())
+            status_text: Some("Build failed with walking monochrome".to_owned()),
         }
     }
 
@@ -451,9 +463,10 @@ mod tests {
     fn it_reads_from_config_file() {
         let mut expected = String::new();
         if let Err(err) = File::open("tests/fixtures/config.json")
-                                .unwrap().read_to_string(&mut expected) {
-                                    panic!("Unable to read fixture: {}", err);
-                                }
+            .unwrap()
+            .read_to_string(&mut expected) {
+            panic!("Unable to read fixture: {}", err);
+        }
         let actual = read_config("tests/fixtures/config.json", Cursor::new("")).unwrap();
         assert_eq!(expected, actual);
     }
@@ -477,21 +490,21 @@ mod tests {
                 base_url: "https://www.example.com/bb/rest/api/latest".to_owned(),
                 project_slug: "foo".to_owned(),
                 repo_slug: "bar".to_owned(),
-                post_build: false
+                post_build: false,
             },
             teamcity: teamcity::TeamcityCredentials {
                 username: "username".to_owned(),
                 password: "password".to_owned(),
                 build_id: "foobar".to_owned(),
-                base_url: "https://www.foobar.com/rest".to_owned()
+                base_url: "https://www.foobar.com/rest".to_owned(),
             },
             telegram: Some(telegram::TelegramCredentials {
                 enabled: true,
                 api_token: "XXX:XXXX".to_owned(),
-                room: -1234567890i64
+                room: -1234567890i64,
             }),
-            run_interval: Interval::Fixed{interval: 999u64},
-            stdout_broadcast: Some(false)
+            run_interval: Interval::Fixed { interval: 999u64 },
+            stdout_broadcast: Some(false),
         };
 
         let json_string = read_config("tests/fixtures/config.json", Cursor::new("")).unwrap();
@@ -506,7 +519,7 @@ mod tests {
         let stub_build = StubBuild {
             build_list: Ok(vec![Build { id: 213232321 }, Build { id: 21323232 }]),
             build: Ok(expected.to_owned()),
-            queued: Err("This does not matter".to_owned())
+            queued: Err("This does not matter".to_owned()),
         };
 
         let actual = get_latest_build(&pull_request(), &stub_build).unwrap();
@@ -518,7 +531,7 @@ mod tests {
         let stub_build = StubBuild {
             build_list: Ok(vec![]),
             build: Err("ignored".to_owned()),
-            queued: Err("This does not matter".to_owned())
+            queued: Err("This does not matter".to_owned()),
         };
         let actual = get_latest_build(&pull_request(), &stub_build);
         assert_eq!(None, actual);
@@ -532,7 +545,7 @@ mod tests {
         let stub_build = StubBuild {
             build_list: Ok(vec![Build { id: 213232321 }, Build { id: 21323232 }]),
             build: Ok(build.to_owned()),
-            queued: Err("This does not matter".to_owned())
+            queued: Err("This does not matter".to_owned()),
         };
 
         let actual = get_latest_build(&pull_request(), &stub_build);
@@ -545,7 +558,7 @@ mod tests {
         let stub_build = StubBuild {
             build_list: Ok(vec![Build { id: 213232321 }, Build { id: 21323232 }]),
             build: Ok(expected.to_owned()),
-            queued: Err("This does not matter".to_owned())
+            queued: Err("This does not matter".to_owned()),
         };
 
         let actual = get_latest_build(&pull_request(), &stub_build).unwrap();
@@ -557,7 +570,7 @@ mod tests {
         let stub_build = StubBuild {
             build_list: Err("foobar".to_owned()),
             build: Err("This does not matter".to_owned()),
-            queued: Err("This does not matter".to_owned())
+            queued: Err("This does not matter".to_owned()),
         };
 
         let actual = get_latest_build(&pull_request(), &stub_build);
@@ -569,7 +582,7 @@ mod tests {
         let stub_build = StubBuild {
             build_list: Ok(vec![Build { id: 213232321 }, Build { id: 21323232 }]),
             build: Err("foobar".to_owned()),
-            queued: Err("This does not matter".to_owned())
+            queued: Err("This does not matter".to_owned()),
         };
 
         let actual = get_latest_build(&pull_request(), &stub_build);
@@ -584,7 +597,7 @@ mod tests {
         let stub_build = StubBuild {
             build_list: Ok(vec![Build { id: 213232321 }, Build { id: 21323232 }]),
             build: Ok(build.to_owned()),
-            queued: Err("This does not matter".to_owned())
+            queued: Err("This does not matter".to_owned()),
         };
 
         let actual = get_latest_build(&pull_request(), &stub_build);
@@ -597,7 +610,7 @@ mod tests {
         let stub_build = StubBuild {
             build_list: Err("This does not matter".to_owned()),
             build: Err("This does not matter".to_owned()),
-            queued: Ok(build.to_owned())
+            queued: Ok(build.to_owned()),
         };
 
         let stub_repo = StubRepository {
@@ -605,7 +618,7 @@ mod tests {
             success: Ok(()),
             running: Ok(()),
             failure: Ok(()),
-            queued: Ok(())
+            queued: Ok(()),
         };
 
         let actual = schedule_build(&pull_request(), &stub_build, &stub_repo);
@@ -620,7 +633,7 @@ mod tests {
             success: Ok(()),
             running: Ok(()),
             failure: Ok(()),
-            queued: Ok(())
+            queued: Ok(()),
         };
 
         let actual = check_build_status(&pull_request(), &build, &stub_repo);
@@ -635,7 +648,7 @@ mod tests {
             success: Ok(()),
             running: Ok(()),
             failure: Ok(()),
-            queued: Ok(())
+            queued: Ok(()),
         };
 
         let actual = check_build_status(&pull_request(), &build, &stub_repo);
@@ -651,7 +664,7 @@ mod tests {
             success: Ok(()),
             running: Ok(()),
             failure: Ok(()),
-            queued: Ok(())
+            queued: Ok(()),
         };
 
         let actual = check_build_status(&pull_request(), &build, &stub_repo);
@@ -667,7 +680,7 @@ mod tests {
             success: Ok(()),
             running: Ok(()),
             failure: Ok(()),
-            queued: Ok(())
+            queued: Ok(()),
         };
 
         let actual = check_build_status(&pull_request(), &build, &stub_repo);

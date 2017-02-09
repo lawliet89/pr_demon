@@ -7,7 +7,7 @@ pub struct TeamcityCredentials {
     pub username: String,
     pub password: String,
     pub base_url: String,
-    pub build_id: String
+    pub build_id: String,
 }
 
 impl ::UsernameAndPassword for TeamcityCredentials {
@@ -25,7 +25,7 @@ impl ::UsernameAndPassword for TeamcityCredentials {
 pub enum BuildState {
     queued,
     finished,
-    running
+    running,
 }
 
 impl BuildState {
@@ -33,7 +33,7 @@ impl BuildState {
         match self {
             BuildState::queued => ::BuildState::Queued,
             BuildState::finished => ::BuildState::Finished,
-            BuildState::running => ::BuildState::Running
+            BuildState::running => ::BuildState::Running,
         }
     }
 }
@@ -43,7 +43,7 @@ impl BuildState {
 pub enum BuildStatus {
     SUCCESS,
     FAILURE,
-    UNKNOWN
+    UNKNOWN,
 }
 
 impl BuildStatus {
@@ -51,7 +51,7 @@ impl BuildStatus {
         match self {
             BuildStatus::SUCCESS => ::BuildStatus::Success,
             BuildStatus::FAILURE => ::BuildStatus::Failure,
-            BuildStatus::UNKNOWN => ::BuildStatus::Unknown
+            BuildStatus::UNKNOWN => ::BuildStatus::Unknown,
         }
     }
 }
@@ -60,7 +60,7 @@ impl BuildStatus {
 pub struct BuildList {
     pub count: i32,
     pub href: String,
-    pub build: Option<Vec<BuildListItem>>
+    pub build: Option<Vec<BuildListItem>>,
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
@@ -75,7 +75,7 @@ pub struct BuildListItem {
     pub branchName: String,
     pub defaultBranch: Option<bool>,
     pub href: String,
-    pub webUrl: String
+    pub webUrl: String,
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
@@ -94,7 +94,7 @@ pub struct Build {
     pub buildType: BuildType,
     pub queuedDate: String,
     pub startDate: Option<String>,
-    pub finishDate:  Option<String>,
+    pub finishDate: Option<String>,
     pub lastChanges: Option<LastChanges>,
     pub changes: Href,
     pub revisions: Revisions,
@@ -103,7 +103,7 @@ pub struct Build {
     pub artifacts: Href,
     pub relatedIssues: Option<Href>,
     pub properties: Properties,
-    pub statistics: Option<Href>
+    pub statistics: Option<Href>,
 }
 
 impl Build {
@@ -111,11 +111,11 @@ impl Build {
         let commit = match self.revisions.revision {
             None => None,
             // Should not panic because None would have caught a non-existent vector
-            Some(ref revisions) => Some(revisions.first().unwrap().version.to_owned())
+            Some(ref revisions) => Some(revisions.first().unwrap().version.to_owned()),
         };
         let status = match self.status {
             None => ::BuildStatus::Unknown,
-            Some(ref status) => status.clone().to_build_status()
+            Some(ref status) => status.clone().to_build_status(),
         };
         ::BuildDetails {
             id: self.id,
@@ -124,10 +124,9 @@ impl Build {
             commit: commit,
             state: self.state.clone().to_build_state(),
             status: status,
-            status_text: self.statusText.to_owned()
+            status_text: self.statusText.to_owned(),
         }
     }
-
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
@@ -138,14 +137,14 @@ pub struct BuildType {
     pub projectName: String,
     pub projectId: String,
     pub href: String,
-    pub webUrl: String
+    pub webUrl: String,
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
 pub struct LastChanges {
     pub count: i32,
-    pub change: Vec<Change>
+    pub change: Vec<Change>,
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
@@ -156,30 +155,30 @@ pub struct Change {
     pub username: String,
     pub date: String,
     pub href: String,
-    pub webUrl: String
+    pub webUrl: String,
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct Href {
-    pub href: String
+    pub href: String,
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct Revisions {
     pub count: i32,
-    pub revision: Option<Vec<Revision>>
+    pub revision: Option<Vec<Revision>>,
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct Revision {
-    pub version: String
+    pub version: String,
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
 pub struct Agent {
     pub name: String,
-    pub typeId: i32
+    pub typeId: i32,
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
@@ -188,19 +187,19 @@ pub struct TestOccurences {
     pub href: String,
     pub passed: Option<i32>,
     pub ignored: Option<i32>,
-    pub default: bool
+    pub default: bool,
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct Properties {
     pub count: i32,
-    pub property: Vec<Property>
+    pub property: Vec<Property>,
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct Property {
     pub name: String,
-    pub value: String
+    pub value: String,
 }
 
 impl ::ContinuousIntegrator for TeamcityCredentials {
@@ -212,24 +211,22 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
         let encoded_branch = utf8_percent_encode(branch, QUERY_ENCODE_SET).collect::<String>();
         let query_string = format!("state:any,branch:(name:{})", encoded_branch);
         let url = format!("{}/buildTypes/id:{}/builds?locator={}",
-            self.base_url, self.build_id, query_string);
+                          self.base_url,
+                          self.build_id,
+                          query_string);
 
         match rest::get::<BuildList>(&url, &headers.headers) {
             Ok(build_list) => {
-                Ok(
-                    match build_list.build {
-                        None => vec![],
-                        Some(ref builds) => {
-                            builds.iter().map(|ref build| {
-                                ::Build {
-                                    id: build.id
-                                }
-                            }).collect()
-                        }
+                Ok(match build_list.build {
+                    None => vec![],
+                    Some(ref builds) => {
+                        builds.iter()
+                            .map(|ref build| ::Build { id: build.id })
+                            .collect()
                     }
-                )
-            },
-            Err(err) =>  Err(format!("Error getting list of builds {}", err))
+                })
+            }
+            Err(err) => Err(format!("Error getting list of builds {}", err)),
         }
     }
 
@@ -242,7 +239,7 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
 
         match rest::get::<Build>(&url, &headers.headers) {
             Ok(build) => Ok(build.to_build_details()),
-            Err(err) => Err(format!("Error getting build {}", err))
+            Err(err) => Err(format!("Error getting build {}", err)),
         }
     }
 
@@ -256,12 +253,17 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
         let body = format!("<build branchName=\"{}\">
                           <buildType id=\"{}\"/>
                           <comment><text>Triggered by PR Demon</text></comment>
-                        </build>", branch, self.build_id);
+                        </build>",
+                           branch,
+                           self.build_id);
         let url = format!("{}/buildQueue", self.base_url);
 
-        match rest::post::<Build>(&url, &body, &headers.headers, &hyper::status::StatusCode::Ok) {
+        match rest::post::<Build>(&url,
+                                  &body,
+                                  &headers.headers,
+                                  &hyper::status::StatusCode::Ok) {
             Ok(build) => Ok(build.to_build_details()),
-            Err(err) => Err(format!("Error queuing build {}", err))
+            Err(err) => Err(format!("Error queuing build {}", err)),
         }
     }
 }

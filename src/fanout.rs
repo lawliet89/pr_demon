@@ -13,32 +13,38 @@ pub enum OpCode {
     BuildFinished { success: bool },
     BuildRunning,
     BuildQueued,
-    Custom { payload: String }
+    Custom { payload: String },
 }
 
 #[derive(RustcDecodable, RustcEncodable, PartialEq, Debug, Clone)]
 pub struct Message {
     pub opcode: OpCode,
-    pub payload: String
+    pub payload: String,
 }
 
 impl Message {
-    pub fn new<T>(opcode: OpCode, payload: &T) -> Message where T : Encodable {
+    pub fn new<T>(opcode: OpCode, payload: &T) -> Message
+        where T: Encodable
+    {
         let encoded = json::encode(payload).unwrap();
         Message {
             opcode: opcode,
-            payload: encoded
+            payload: encoded,
         }
     }
 }
 
 #[derive(Clone)]
-pub struct Fanout<T> where T : 'static + Send + Sync + Clone {
+pub struct Fanout<T>
+    where T: 'static + Send + Sync + Clone
+{
     broadcast_tx: Sender<T>,
-    pub subscribers: Arc<Mutex<Vec<Sender<T>>>>
+    pub subscribers: Arc<Mutex<Vec<Sender<T>>>>,
 }
 
-impl<T> Fanout<T>  where T : 'static + Send + Sync + Clone {
+impl<T> Fanout<T>
+    where T: 'static + Send + Sync + Clone
+{
     pub fn new() -> Fanout<T> {
         let (broadcast_tx, broadcast_rx) = channel::<T>();
         let subscribers = Arc::new(Mutex::new(Vec::<Sender<T>>::new()));
@@ -54,7 +60,7 @@ impl<T> Fanout<T>  where T : 'static + Send + Sync + Clone {
                 let mut stale_subscribers_indices = Vec::<usize>::new();
                 for (index, subscriber_tx) in subscribers.iter().enumerate() {
                     match subscriber_tx.send(message.clone()) {
-                        Ok(_) => {},
+                        Ok(_) => {}
                         Err(_) => {
                             stale_subscribers_indices.push(index);
                         }
@@ -70,7 +76,7 @@ impl<T> Fanout<T>  where T : 'static + Send + Sync + Clone {
 
         Fanout {
             broadcast_tx: broadcast_tx,
-            subscribers: subscribers
+            subscribers: subscribers,
         }
     }
 
@@ -82,7 +88,7 @@ impl<T> Fanout<T>  where T : 'static + Send + Sync + Clone {
 
     pub fn broadcast(&self, message: &T) {
         match self.broadcast_tx.send(message.clone()) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(err) => {
                 panic!("Broadcaster has been deallocated {}", err);
             }
@@ -108,8 +114,8 @@ mod tests {
             title: "A very important PR".to_owned(),
             author: User {
                 name: "Aaron Xiao Ming".to_owned(),
-                email: "aaron@xiao.ming".to_owned()
-            }
+                email: "aaron@xiao.ming".to_owned(),
+            },
         }
     }
 
@@ -126,15 +132,17 @@ mod tests {
         fanout.broadcast(&expected_message);
 
         timeout_ms(move || {
-            let message = subscriber_one.recv();
-            assert_eq!(expected_message, message.unwrap());
-        }, TIMEOUT);
+                       let message = subscriber_one.recv();
+                       assert_eq!(expected_message, message.unwrap());
+                   },
+                   TIMEOUT);
 
 
         timeout_ms(move || {
-            let message = subscriber_two.recv();
-            assert_eq!(expected_message_clone, message.unwrap());
-        }, TIMEOUT);
+                       let message = subscriber_two.recv();
+                       assert_eq!(expected_message_clone, message.unwrap());
+                   },
+                   TIMEOUT);
     }
 
     #[test]
@@ -152,9 +160,10 @@ mod tests {
         fanout.broadcast(&expected_message);
 
         timeout_ms(move || {
-            let message = subscriber_one.recv();
-            assert_eq!(expected_message, message.unwrap());
-        }, TIMEOUT);
+                       let message = subscriber_one.recv();
+                       assert_eq!(expected_message, message.unwrap());
+                   },
+                   TIMEOUT);
 
         assert_eq!(fanout.subscribers.lock().unwrap().len(), 1);
     }
