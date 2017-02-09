@@ -175,26 +175,16 @@ fn read_config<R>(path: &str, reader: R) -> Result<String, String>
 {
     let mut file: Box<std::io::Read> = match path {
         "-" => Box::new(reader),
-        path @ _ => {
-            match File::open(path) {
-                Ok(f) => Box::new(f),
-                Err(err) => return Err(format!("Unable to read file because: {}", err)),
-            }
-        }
+        path @ _ => Box::new(File::open(path).map_err(|e| format!("Unable to read file because: {}", e))?),
     };
 
     let mut json = String::new();
-    match file.read_to_string(&mut json) {
-        Ok(_) => Ok(json),
-        Err(err) => Err(format!("Unable to read config: {}", err)),
-    }
+    file.read_to_string(&mut json).map_err(|e| format!("Unable to read config: {}", e))?;
+    Ok(json)
 }
 
 fn parse_config(json: &str) -> Result<Config, String> {
-    match json::decode(&json) {
-        Ok(x) => Ok(x),
-        Err(err) => return Err(format!("Unable to decode JSON value {}", err)),
-    }
+    json::decode(&json).map_err(|err| format!("Unable to decode JSON value {}", err))
 }
 
 fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<BuildDetails> {
@@ -299,7 +289,7 @@ fn schedule_build(pr: &PullRequest, ci: &ContinuousIntegrator, repo: &Repository
     match queued_build {
         Err(err) => {
             println!("{}Error queuing build: {}", prefix(2), err);
-            return Err(err);
+            Err(err)
         }
         Ok(queued) => {
             println!("{}Build Queued: {}", prefix(2), queued.web_url);
