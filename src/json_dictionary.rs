@@ -11,7 +11,6 @@ impl JsonDictionary {
         JsonDictionary { dictionary: BTreeMap::new() }
     }
 
-    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.dictionary.clear();
     }
@@ -22,12 +21,10 @@ impl JsonDictionary {
         self.dictionary.get(key).map(|json| json::decode(json))
     }
 
-    #[allow(dead_code)]
     pub fn contains_key(&self, key: &str) -> bool {
         self.dictionary.contains_key(key)
     }
 
-    #[allow(dead_code)]
     pub fn insert<T>(&mut self, key: &str, value: &T) -> Result<(), json::EncoderError>
         where T: Encodable
     {
@@ -36,17 +33,14 @@ impl JsonDictionary {
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub fn remove(&mut self, key: &str) -> bool {
         self.dictionary.remove(key).is_some()
     }
 
-    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.dictionary.len()
     }
 
-    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.dictionary.is_empty()
     }

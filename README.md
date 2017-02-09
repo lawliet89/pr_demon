@@ -10,6 +10,11 @@ Run `cargo run --release -- path/to/config.json` or `cat path/to/config.json | c
 Alternatively, if you place the configuration file in `./config/config.json`, you can run the daemon in a Docker
 container using `docker-compose up -d --build`
 
+## Tests
+```
+RUSTFLAGS="${RUSTFLAGS:-} -D warnings" cargo test
+```
+
 ## TODOs:
  - Find a way to mock HTTP Requests
  - Refactor to better support other CI tools and SCM
