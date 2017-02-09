@@ -177,33 +177,31 @@ fn main() {
     };
 
     loop {
-        let pull_requests = match bitbucket.get_pr_list() {
+        match bitbucket.get_pr_list() {
             Err(err) => {
                 error!("{}Error getting Pull Requests: {}", prefix(0), err);
-                continue;
             }
             Ok(prs) => {
                 info!("{}{} Open Pull Requests Found", prefix(0), prs.len());
-                prs
+                for pr in prs {
+                    info!("{}Pull Request #{} ({})", prefix(1), pr.id, pr.web_url);
+                    if let Err(handled_pr) = handle_pull_request(&pr, &bitbucket, &config.teamcity, &fanout) {
+                        error!("{}{}", prefix(2), handled_pr);
+                    }
+                }
             }
         };
 
-        for pr in &pull_requests {
-            info!("{}Pull Request #{} ({})", prefix(1), pr.id, pr.web_url);
-            if let Err(handled_pr) = handle_pull_request(pr, &bitbucket, &config.teamcity, &fanout) {
-                error!("{}{}", prefix(2), handled_pr);
+        let sleep_duration = match schedule {
+            Some(ref sch) => {
+                // TODO: Fix these unwrapping
+                (sch.next_utc().unwrap()).signed_duration_since(UTC::now()).to_std().unwrap()
             }
+            None => fixed_interval.unwrap(),
+        };
 
-            let sleep_duration = match schedule {
-                Some(ref sch) => {
-                    // TODO: Fix these unwrapping
-                    (sch.next_utc().unwrap()).signed_duration_since(UTC::now()).to_std().unwrap()
-                }
-                None => fixed_interval.unwrap(),
-            };
-
-            std::thread::sleep(sleep_duration);
-        }
+        info!("{} Sleeping for {} seconds", prefix(0), sleep_duration.as_secs());
+        std::thread::sleep(sleep_duration);
     }
 }
 
