@@ -15,7 +15,6 @@ fern = "0.3"
 hyper = "0.9"
 log = "0.3"
 rustc-serialize = "0.3"
-telegram-bot = "0.4"
 time = "0.1"
 url = "1.0"
 

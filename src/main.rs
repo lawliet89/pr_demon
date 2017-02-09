@@ -6,7 +6,6 @@ extern crate hyper;
 #[macro_use]
 extern crate log;
 extern crate rustc_serialize;
-extern crate telegram_bot;
 extern crate time;
 extern crate url;
 
@@ -15,7 +14,6 @@ mod fanout;
 mod json_dictionary;
 mod rest;
 mod teamcity;
-mod telegram;
 
 use std::fs::File;
 use std::io::{self, Read};
@@ -55,7 +53,6 @@ struct Config {
     // TODO: Rename fields
     teamcity: teamcity::TeamcityCredentials,
     bitbucket: bitbucket::BitbucketCredentials,
-    telegram: Option<telegram::TelegramCredentials>,
     run_interval: Interval,
     stdout_broadcast: Option<bool>,
 }
@@ -162,11 +159,6 @@ fn main() {
     }
 
     let bitbucket = bitbucket::Bitbucket::new(&config.bitbucket, &fanout);
-    if let Some(t) = config.clone().telegram {
-        if t.enabled {
-            t.announce_from(fanout.subscribe()).expect("Failed to authenticate with Telegram");
-        }
-    }
 
     let mut fixed_interval: Option<std::time::Duration> = None;
     let mut schedule: Option<CronSchedule> = None;
@@ -393,7 +385,7 @@ fn resolve_log_level(log_level: &Option<String>) -> Option<log::LogLevelFilter> 
 
 #[cfg(test)]
 mod tests {
-    use super::{bitbucket, teamcity, telegram, Config, Interval, PullRequest, ContinuousIntegrator, Build};
+    use super::{bitbucket, teamcity, Config, Interval, PullRequest, ContinuousIntegrator, Build};
     use super::{BuildDetails, BuildStatus, BuildState, Repository, User};
     use super::{read_config, parse_config, get_latest_build, schedule_build};
     use super::check_build_status;
@@ -552,11 +544,6 @@ mod tests {
                 build_id: "foobar".to_owned(),
                 base_url: "https://www.foobar.com/rest".to_owned(),
             },
-            telegram: Some(telegram::TelegramCredentials {
-                enabled: true,
-                api_token: "XXX:XXXX".to_owned(),
-                room: -1234567890i64,
-            }),
             run_interval: Interval::Fixed { interval: 999u64 },
             stdout_broadcast: Some(false),
         };
