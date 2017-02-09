@@ -215,19 +215,16 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
                           self.build_id,
                           query_string);
 
-        match rest::get::<BuildList>(&url, &headers.headers) {
-            Ok(build_list) => {
-                Ok(match build_list.build {
-                    None => vec![],
-                    Some(ref builds) => {
-                        builds.iter()
-                            .map(|ref build| ::Build { id: build.id })
-                            .collect()
-                    }
-                })
+        let build_list = rest::get::<BuildList>(&url, &headers.headers)
+            .map_err(|err| format!("Error getting list of builds {}", err))?;
+        Ok(match build_list.build {
+            None => vec![],
+            Some(ref builds) => {
+                builds.iter()
+                    .map(|ref build| ::Build { id: build.id })
+                    .collect()
             }
-            Err(err) => Err(format!("Error getting list of builds {}", err)),
-        }
+        })
     }
 
     fn get_build(&self, build_id: i32) -> Result<::BuildDetails, String> {
@@ -237,10 +234,8 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
 
         let url = format!("{}/builds/id:{}", self.base_url, build_id);
 
-        match rest::get::<Build>(&url, &headers.headers) {
-            Ok(build) => Ok(build.to_build_details()),
-            Err(err) => Err(format!("Error getting build {}", err)),
-        }
+        let build = rest::get::<Build>(&url, &headers.headers).map_err(|err| format!("Error getting build {}", err))?;
+        Ok(build.to_build_details())
     }
 
     fn queue_build(&self, branch: &str) -> Result<::BuildDetails, String> {
@@ -258,12 +253,11 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
                            self.build_id);
         let url = format!("{}/buildQueue", self.base_url);
 
-        match rest::post::<Build>(&url,
-                                  &body,
-                                  &headers.headers,
-                                  &hyper::status::StatusCode::Ok) {
-            Ok(build) => Ok(build.to_build_details()),
-            Err(err) => Err(format!("Error queuing build {}", err)),
-        }
+        let build =
+            rest::post::<Build>(&url,
+                                &body,
+                                &headers.headers,
+                                &hyper::status::StatusCode::Ok).map_err(|err| format!("Error queuing build {}", err))?;
+        Ok(build.to_build_details())
     }
 }

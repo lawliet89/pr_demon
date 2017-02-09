@@ -59,12 +59,9 @@ impl<T> Fanout<T>
                 let mut subscribers = subscribers_mutex.unwrap();
                 let mut stale_subscribers_indices = Vec::<usize>::new();
                 for (index, subscriber_tx) in subscribers.iter().enumerate() {
-                    match subscriber_tx.send(message.clone()) {
-                        Ok(_) => {}
-                        Err(_) => {
-                            stale_subscribers_indices.push(index);
-                        }
-                    };
+                    if let Err(_) = subscriber_tx.send(message.clone()) {
+                        stale_subscribers_indices.push(index);
+                    }
                 }
                 // Prune stale indices
                 stale_subscribers_indices.sort();
@@ -87,12 +84,9 @@ impl<T> Fanout<T>
     }
 
     pub fn broadcast(&self, message: &T) {
-        match self.broadcast_tx.send(message.clone()) {
-            Ok(_) => {}
-            Err(err) => {
-                panic!("Broadcaster has been deallocated {}", err);
-            }
-        };
+        if let Err(err) = self.broadcast_tx.send(message.clone()) {
+            panic!("Broadcaster has been deallocated {}", err);
+        }
     }
 }
 
