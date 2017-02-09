@@ -1,7 +1,11 @@
 use std::sync::mpsc::Receiver;
 use std::thread;
 use std::time;
-use telegram_bot;
+
+use telebot::bot;
+use tokio_core::reactor::Core;
+use futures::stream::Stream;
+use futures::Future;
 use rustc_serialize::{json, Decodable};
 
 use fanout::{Message, OpCode};
@@ -16,7 +20,10 @@ pub struct TelegramCredentials {
 
 impl TelegramCredentials {
     pub fn announce_from(&self, subscriber: Receiver<Message>) -> Result<(), String> {
-        let api = telegram_bot::Api::from_token(self.api_token.as_str()).map_err(|err| format!("{}", err))?;
+        let mut lp = Core::new().expect("Unable to create Tokio core reactor");
+
+        let api = bot::RcBot::new(lp.handle(), self.api_token.as_str())
+                   .update_interval(200);
         let room = self.room;
 
         thread::spawn(move || {

@@ -2,12 +2,14 @@ extern crate chrono;
 extern crate cron;
 extern crate docopt;
 extern crate fern;
+extern crate futures;
 extern crate hyper;
 #[macro_use]
 extern crate log;
 extern crate rustc_serialize;
-extern crate telegram_bot;
+extern crate telebot;
 extern crate time;
+extern crate tokio_core;
 extern crate url;
 
 mod bitbucket;
