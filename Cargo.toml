@@ -8,13 +8,13 @@ name = "pr_demon"
 test = true
 
 [dependencies]
-hyper = "*"
-rustc-serialize = "*"
-telegram-bot = "0.4"
-time = "*"
-url = "*"
+chrono = "0.3"
 cron = "0.0.2"
-chrono = "*"
+hyper = "0.10"
+rustc-serialize = "0.3"
+telegram-bot = "0.4"
+time = "0.1"
+url = "1.0"
 
 [dev-dependencies]
-timebomb = "*"
+timebomb = "0.1"

@@ -161,7 +161,10 @@ fn main() {
             }
 
             let sleep_duration = match schedule {
-                Some(ref sch) => (sch.next_utc().unwrap() - UTC::now()).to_std().unwrap(),
+                Some(ref sch) => {
+                    // TODO: Fix these unwrapping
+                    (sch.next_utc().unwrap()).signed_duration_since(UTC::now()).to_std().unwrap()
+                },
                 None => fixed_interval.unwrap(),
             };
 
