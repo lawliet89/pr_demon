@@ -16,11 +16,7 @@ pub struct TelegramCredentials {
 
 impl TelegramCredentials {
     pub fn announce_from(&self, subscriber: Receiver<Message>) -> Result<(), String> {
-        let api = match telegram_bot::Api::from_token(self.api_token.as_str()) {
-            Ok(x) => x,
-            Err(err) => return Err(format!("{}", err)),
-        };
-
+        let api = telegram_bot::Api::from_token(self.api_token.as_str()).map_err(|err| format!("{}", err))?;
         let room = self.room;
 
         thread::spawn(move || {
@@ -40,10 +36,10 @@ impl TelegramCredentials {
                         // should panic if the deserialization failed
                         let pr = Self::unwrap_from_json_dictionary::<::PullRequest>(&dictionary, "pr").unwrap();
 
-                        let status_text = match build.status_text {
-                            Some(text) => text,
-                            None => "".to_owned(),
-                        };
+                        let status_text = build.status_text
+                            .as_ref()
+                            .map_or_else(|| "".to_string(), |s| s.to_string());
+
                         let message_text = format!("⚠ Tests for Pull Request #{} have failed\n{}\n{}\nBy {}\n{}\n{}",
                                                    pr.id,
                                                    status_text,
