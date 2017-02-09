@@ -156,8 +156,8 @@ fn main() {
         let subscriber = fanout.subscribe();
         thread::spawn(move || for message in subscriber.iter() {
             info!("Fanout broadcast received: {:?} {}",
-                     message.opcode,
-                     message.payload)
+                  message.opcode,
+                  message.payload)
         });
     }
 
@@ -246,9 +246,9 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
                     }
                     Err(err) => {
                         error!("{}Unable to retrieve information for build ID {}: {}",
-                                 prefix(2),
-                                 latest_build_id,
-                                 err);
+                               prefix(2),
+                               latest_build_id,
+                               err);
                         None
                     }
                 }
@@ -256,8 +256,8 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
         }
         Err(err) => {
             warn!("{}Error fetching builds -- queuing anyway: {}",
-                     prefix(2),
-                     err);
+                  prefix(2),
+                  err);
             None
         }
     };
@@ -272,8 +272,8 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
                         Some(build.to_owned())
                     } else {
                         info!("{}Commit does not match with {} -- scheduling build",
-                                 prefix(2),
-                                 commit);
+                              prefix(2),
+                              commit);
                         None
                     }
                 }
