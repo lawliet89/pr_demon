@@ -19,11 +19,7 @@ impl JsonDictionary {
     pub fn get<T>(&self, key: &str) -> Option<Result<T, json::DecoderError>>
         where T: Decodable
     {
-        let json = self.dictionary.get(key);
-        match json {
-            None => None,
-            Some(ref json) => Some(json::decode(json)),
-        }
+        self.dictionary.get(key).map(|json| json::decode(json))
     }
 
     #[allow(dead_code)]
@@ -35,31 +31,24 @@ impl JsonDictionary {
     pub fn insert<T>(&mut self, key: &str, value: &T) -> Result<(), json::EncoderError>
         where T: Encodable
     {
-        match json::encode(value) {
-            Ok(encoded) => {
-                self.dictionary.insert(key.to_owned(), encoded);
-                Ok(())
-            }
-            Err(err) => Err(err),
-        }
+        let encoded = json::encode(value)?;
+        self.dictionary.insert(key.to_owned(), encoded);
+        Ok(())
     }
 
     #[allow(dead_code)]
     pub fn remove(&mut self, key: &str) -> bool {
-        match self.dictionary.remove(key) {
-            Some(_) => true,
-            None => false,
-        }
+        self.dictionary.remove(key).is_some()
     }
 
     #[allow(dead_code)]
     pub fn len(&self) -> usize {
-        return self.dictionary.len();
+        self.dictionary.len()
     }
 
     #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
-        return self.dictionary.is_empty();
+        self.dictionary.is_empty()
     }
 }
 
