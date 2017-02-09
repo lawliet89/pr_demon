@@ -178,44 +178,33 @@ impl ::Repository for Bitbucket {
                           self.credentials.project_slug,
                           self.credentials.repo_slug);
 
-        match rest::get::<PagedApi<PullRequest>>(&url, &headers.headers) {
-            Ok(ref prs) => {
-                Ok(prs.values
-                    .iter()
-                    .map(|ref pr| {
-                        ::PullRequest {
-                            id: pr.id,
-                            web_url: pr.links["self"][0].href.to_owned(),
-                            from_ref: pr.fromRef.id.to_owned(),
-                            from_commit: pr.fromRef.latestCommit.to_owned(),
-                            title: pr.title.to_owned(),
-                            author: ::User {
-                                name: pr.author.user.displayName.to_owned(),
-                                email: pr.author.user.emailAddress.to_owned(),
-                            },
-                        }
-                    })
-                    .collect())
-            }
-            Err(err) => Err(format!("Error getting list of Pull Requests {}", err)),
-        }
+        let prs = rest::get::<PagedApi<PullRequest>>(&url, &headers.headers)
+            .map_err(|err| format!("Error getting list of Pull Requests {}", err))?;
+        Ok(prs.values
+            .iter()
+            .map(|ref pr| {
+                ::PullRequest {
+                    id: pr.id,
+                    web_url: pr.links["self"][0].href.to_owned(),
+                    from_ref: pr.fromRef.id.to_owned(),
+                    from_commit: pr.fromRef.latestCommit.to_owned(),
+                    title: pr.title.to_owned(),
+                    author: ::User {
+                        name: pr.author.user.displayName.to_owned(),
+                        email: pr.author.user.emailAddress.to_owned(),
+                    },
+                }
+            })
+            .collect())
     }
 
     fn build_queued(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
-        match self.update_pr_build_status_comment(&pr, &build, &BuildState::INPROGRESS) {
-            Ok(_) => {}
-            Err(err) => return Err(format!("Error submitting comment: {}", err)),
-        };
-        match self.credentials.post_build {
-            true => {
-                match self.post_build(&build, &pr) {
-                    Ok(_) => Ok(()),
-                    Err(err) => return Err(format!("Error posting build: {}", err)),
-                }
-            }
-            false => Ok(()),
+        self.update_pr_build_status_comment(&pr, &build, &BuildState::INPROGRESS)
+            .map_err(|err| format!("Error submitting comment: {}", err))?;
+        if self.credentials.post_build {
+            self.post_build(&build, &pr).map_err(|err| format!("Error posting build: {}", err))?;
         }
-
+        Ok(())
     }
 
     fn build_running(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
@@ -223,35 +212,22 @@ impl ::Repository for Bitbucket {
     }
 
     fn build_success(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
-        match self.update_pr_build_status_comment(&pr, &build, &BuildState::SUCCESSFUL) {
-            Ok(_) => {}
-            Err(err) => return Err(format!("Error submitting comment: {}", err)),
-        };
-        match self.credentials.post_build {
-            true => {
-                match self.post_build(&build, &pr) {
-                    Ok(_) => Ok(()),
-                    Err(err) => Err(format!("Error posting build: {}", err)),
-                }
-            }
-            false => Ok(()),
+        self.update_pr_build_status_comment(&pr, &build, &BuildState::SUCCESSFUL)
+            .map_err(|err| format!("Error submitting comment: {}", err))?;
+
+        if self.credentials.post_build {
+            self.post_build(&build, &pr).map_err(|err| format!("Error posting build: {}", err))?;
         }
+        Ok(())
     }
 
     fn build_failure(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
-        match self.update_pr_build_status_comment(&pr, &build, &BuildState::FAILED) {
-            Ok(_) => {}
-            Err(err) => return Err(format!("Error submitting comment: {}", err)),
-        };
-        match self.credentials.post_build {
-            true => {
-                match self.post_build(&build, &pr) {
-                    Ok(_) => Ok(()),
-                    Err(err) => Err(format!("Error posting build: {}", err)),
-                }
-            }
-            false => Ok(()),
+        self.update_pr_build_status_comment(&pr, &build, &BuildState::FAILED)
+            .map_err(|err| format!("Error submitting comment: {}", err))?;
+        if self.credentials.post_build {
+            self.post_build(&build, &pr).map_err(|err| format!("Error posting build: {}", err))?;
         }
+        Ok(())
     }
 }
 
@@ -272,19 +248,15 @@ impl Bitbucket {
     }
 
     fn matching_comments(comments: &Vec<Comment>, text: &str) -> Option<Comment> {
-        let found_comment = comments.iter().find(|&comment| comment.text == text);
-        match found_comment {
-            Some(comment) => Some(comment.clone().to_owned()),
-            None => None,
-        }
+        comments.iter()
+            .find(|&comment| comment.text == text)
+            .map(|comment| comment.clone())
     }
 
     fn matching_comments_substring(comments: &Vec<Comment>, substr: &str) -> Option<Comment> {
-        let found_comment = comments.iter().find(|&comment| comment.text.as_str().contains(substr));
-        match found_comment {
-            Some(comment) => Some(comment.clone().to_owned()),
-            None => None,
-        }
+        comments.iter()
+            .find(|&comment| comment.text.as_str().contains(substr))
+            .map(|comment| comment.clone())
     }
 
     fn update_pr_build_status_comment(&self,
@@ -292,22 +264,15 @@ impl Bitbucket {
                                       build: &::BuildDetails,
                                       state: &BuildState)
                                       -> Result<Comment, String> {
+
+        let status_text = build.status_text
+            .as_ref()
+            .map_or_else(|| "".to_string(), |s| s.to_string());
+
         let text = match *state {
             BuildState::INPROGRESS => make_queued_comment(&build.web_url, &pr.from_commit),
-            BuildState::FAILED => {
-                let status_text = match build.status_text {
-                    None => "".to_owned(),
-                    Some(ref text) => text.to_owned(),
-                };
-                make_failure_comment(&build.web_url, &pr.from_commit, &status_text)
-            }
-            BuildState::SUCCESSFUL => {
-                let status_text = match build.status_text {
-                    None => "".to_owned(),
-                    Some(ref text) => text.to_owned(),
-                };
-                make_success_comment(&build.web_url, &pr.from_commit, &status_text)
-            }
+            BuildState::FAILED => make_failure_comment(&build.web_url, &pr.from_commit, &status_text),
+            BuildState::SUCCESSFUL => make_success_comment(&build.web_url, &pr.from_commit, &status_text),
         };
 
         let mut event_payload = json_dictionary::JsonDictionary::new();
@@ -330,12 +295,9 @@ impl Bitbucket {
             Err(err) => (Err(format!("Error getting list of comments {}", err)), "Error"),
         };
 
-        match comment {
-            Ok(ref comment) => {
-                event_payload.insert("comment", comment).expect("Comment should be RustcEncodable");
-            }
-            Err(_) => {}
-        };
+        if let Ok(ref comment) = comment {
+            event_payload.insert("comment", comment).expect("Comment should be RustcEncodable");
+        }
 
         self.broadcast(&format!("Comment::{}", opcode), &event_payload);
         comment
@@ -351,20 +313,17 @@ impl Bitbucket {
                           self.credentials.repo_slug,
                           pr_id);
 
-        match rest::get::<PagedApi<Activity>>(&url, &headers.headers) {
-            Ok(activities) => {
-                Ok(activities.values
-                    .iter()
-                    .filter(|&activity| activity.comment.is_some())
-                    .filter(|&activity| activity.user.name == self.credentials.username)
-                    .map(|ref activity| {
-                        // won't panic because of filter above
-                        activity.comment.as_ref().unwrap().to_owned()
-                    })
-                    .collect())
-            }
-            Err(err) => Err(format!("Error getting comments {}", err)),
-        }
+        let activities = rest::get::<PagedApi<Activity>>(&url, &headers.headers)
+            .map_err(|err| format!("Error getting comments {}", err))?;
+
+        Ok(activities.values
+            .iter()
+            .filter(|&activity| activity.comment.is_some() && activity.user.name == self.credentials.username)
+            .map(|ref activity| {
+                // won't panic because of filter above
+                activity.comment.as_ref().unwrap().to_owned()
+            })
+            .collect())
     }
 
     fn post_comment(&self, pr_id: i32, text: &str) -> Result<Comment, String> {
@@ -380,13 +339,12 @@ impl Bitbucket {
                           self.credentials.repo_slug,
                           pr_id);
 
-        match rest::post::<Comment>(&url,
-                                    &body,
-                                    &headers.headers,
-                                    &hyper::status::StatusCode::Created) {
-            Ok(comment) => Ok(comment.to_owned()),
-            Err(err) => Err(format!("Error posting comment {}", err)),
-        }
+        Ok(rest::post::<Comment>(&url,
+                                 &body,
+                                 &headers.headers,
+                                 &hyper::status::StatusCode::Created)
+            .map_err(|err| format!("Error posting comment {}", err))?
+            .to_owned())
     }
 
     fn edit_comment(&self, pr_id: i32, comment: &Comment, text: &str) -> Result<Comment, String> {
@@ -407,13 +365,13 @@ impl Bitbucket {
                           pr_id,
                           comment.id);
 
-        match rest::put::<Comment>(&url,
-                                   &body,
-                                   &headers.headers,
-                                   &hyper::status::StatusCode::Ok) {
-            Ok(comment) => Ok(comment.to_owned()),
-            Err(err) => Err(format!("Error posting comment {}", err)),
-        }
+        Ok(rest::put::<Comment>(&url,
+                                &body,
+                                &headers.headers,
+                                &hyper::status::StatusCode::Ok)
+            .map_err(|err| format!("Error posting comment {}", err))?
+            .to_owned())
+
     }
 
     fn post_build(&self, build: &::BuildDetails, pr: &::PullRequest) -> Result<Build, String> {
@@ -429,14 +387,11 @@ impl Bitbucket {
                           self.credentials.base_url,
                           pr.from_commit);
 
-        match rest::post_raw(&url, &body, &headers.headers) {
-            Ok(response) => {
-                match response.status {
-                    ref status if status == &hyper::status::StatusCode::NoContent => Ok(bitbucket_build),
-                    e @ _ => Err(e.to_string()),
-                }
-            }
-            Err(err) => Err(format!("Error posting build {}", err)),
+        let response =
+            rest::post_raw(&url, &body, &headers.headers).map_err(|err| format!("Error posting build {}", err))?;
+        match response.status {
+            ref status if status == &hyper::status::StatusCode::NoContent => Ok(bitbucket_build),
+            e @ _ => Err(e.to_string()),
         }
     }
 
@@ -451,10 +406,9 @@ impl Bitbucket {
             _ => BuildState::INPROGRESS,
         };
 
-        let description = match build.status_text {
-            None => "".to_owned(),
-            Some(ref text) => text.to_owned(),
-        };
+        let description = build.status_text
+            .as_ref()
+            .map_or_else(|| "".to_string(), |s| s.to_string());
 
         Build {
             state: build_status.to_owned(),
