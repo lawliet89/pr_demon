@@ -10,7 +10,10 @@ test = true
 [dependencies]
 chrono = "0.3"
 cron = "0.0.2"
+docopt = "0.7.0"
+fern = "0.3"
 hyper = "0.10"
+log = "0.3"
 rustc-serialize = "0.3"
 telegram-bot = "0.4"
 time = "0.1"

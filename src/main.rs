@@ -1,10 +1,14 @@
+extern crate chrono;
+extern crate cron;
+extern crate docopt;
+extern crate fern;
 extern crate hyper;
+#[macro_use]
+extern crate log;
 extern crate rustc_serialize;
 extern crate telegram_bot;
 extern crate time;
 extern crate url;
-extern crate cron;
-extern crate chrono;
 
 mod bitbucket;
 mod fanout;
@@ -13,16 +17,38 @@ mod rest;
 mod teamcity;
 mod telegram;
 
-use std::env;
 use std::fs::File;
 use std::io::{self, Read};
 use std::iter;
 use std::boxed::Box;
 use std::thread;
-use rustc_serialize::json;
-use fanout::{Fanout, Message, OpCode};
-use cron::CronSchedule;
+
 use chrono::*;
+use cron::CronSchedule;
+use docopt::Docopt;
+use rustc_serialize::json;
+
+use fanout::{Fanout, Message, OpCode};
+
+const USAGE: &'static str = "
+pr_demon
+
+Usage:
+  pr_demon [options] <configuration-file>
+  pr_demon -h | --help
+
+Use with a <configuration-file> to specify a path to configuration. Use `-` to read from stdin
+
+Options:
+  -h --help                 Show this screen.
+  --log-level=<log-level>   The default log level is `info`. Can be set to `trace`, `debug`, `info`, `warn`, or `error`
+";
+
+#[derive(RustcDecodable, Debug)]
+struct Args {
+    arg_configuration_file: String,
+    flag_log_level: Option<String>,
+}
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 struct Config {
@@ -113,8 +139,16 @@ pub trait ContinuousIntegrator {
 }
 
 fn main() {
-    let config_path = env::args().nth(1).expect("Usage ./pr_demon path_to_config.json (Use - to read from stdin)");
-    let config_json = read_config(&config_path, io::stdin()).unwrap();
+    let args: Args = Docopt::new(USAGE)
+        .and_then(|d| d.decode())
+        .unwrap_or_else(|e| e.exit());
+
+    let logger_config = configure_logger(&args.flag_log_level);
+    if let Err(e) = fern::init_global_logger(logger_config, log::LogLevelFilter::Debug) {
+        panic!("Failed to initialize global logger: {}", e);
+    }
+
+    let config_json = read_config(&args.arg_configuration_file, io::stdin()).unwrap();
     let config = parse_config(&config_json).unwrap();
 
     let mut fanout = Fanout::<Message>::new();
@@ -164,7 +198,7 @@ fn main() {
                 Some(ref sch) => {
                     // TODO: Fix these unwrapping
                     (sch.next_utc().unwrap()).signed_duration_since(UTC::now()).to_std().unwrap()
-                },
+                }
                 None => fixed_interval.unwrap(),
             };
 
@@ -328,6 +362,41 @@ fn prefix(x: usize) -> String {
     format!("[{}]{} ",
             format_time(),
             iter::repeat("    ").take(x).collect::<String>())
+}
+
+fn to_option_str(opt: &Option<String>) -> Option<&str> {
+    opt.as_ref().map(|s| &**s)
+}
+
+// TODO: Support logging to file/stderr/etc.
+fn configure_logger<'a>(log_level: &Option<String>) -> fern::DispatchConfig<'a> {
+    let log_level = resolve_log_level(log_level)
+        .or_else(|| {
+            panic!("Unknown log level `{}``", log_level.as_ref().unwrap());
+        })
+        .unwrap();
+
+    fern::DispatchConfig {
+        format: Box::new(|msg: &str, level: &log::LogLevel, _location: &log::LogLocation| {
+            format!("[{}][{}] {}",
+                    time::now().strftime("%FT%T%z").unwrap(),
+                    level,
+                    msg)
+        }),
+        output: vec![fern::OutputConfig::stdout()],
+        level: log_level,
+    }
+}
+
+fn resolve_log_level(log_level: &Option<String>) -> Option<log::LogLevelFilter> {
+    match to_option_str(log_level) {
+        Some("trace") => Some(log::LogLevelFilter::Trace),
+        Some("debug") => Some(log::LogLevelFilter::Debug),
+        Some("warn") => Some(log::LogLevelFilter::Warn),
+        Some("error") => Some(log::LogLevelFilter::Error),
+        None | Some("info") => Some(log::LogLevelFilter::Info),
+        Some(_) => None,
+    }
 }
 
 #[cfg(test)]
