@@ -116,23 +116,14 @@ fn request<T>(url: &str,
               -> Result<T, String>
     where T: Decodable
 {
-    let mut response = match request_raw(url, method, body, headers) {
-        Ok(response) => response,
-        Err(err) => return Err(err.to_string()),
-    };
-
+    let mut response = request_raw(url, method, body, headers).map_err(|err| err.to_string())?;
     match response.status {
         ref status if status == status_code => (),
         e @ _ => return Err(e.to_string()),
     };
 
     let mut json_string = String::new();
-    if let Err(err) = response.read_to_string(&mut json_string) {
-        return Err(err.to_string());
-    }
+    response.read_to_string(&mut json_string).map_err(|err| err.to_string())?;
 
-    match json::decode(&json_string) {
-        Ok(decoded) => Ok(decoded),
-        Err(err) => Err(format!("Error parsing response: {} {}", json_string, err)),
-    }
+    json::decode(&json_string).map_err(|err| format!("Error parsing response: {} {}", json_string, err))
 }
