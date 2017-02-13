@@ -10,12 +10,12 @@
     "password": "password",
     "base_url": "https://www.example.com/bb/rest/api/latest",
     "project_slug": "foo",
-    "repo_slug": "bar",
-    "post_build": false
+    "repo_slug": "bar"
   },
   "run_interval": {
     "variant": "Fixed",
     "fields": [999]
   },
-  "stdout_broadcast": false
+  "stdout_broadcast": false,
+  "post_build": false
 }

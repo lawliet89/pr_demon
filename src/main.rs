@@ -56,6 +56,7 @@ struct Config {
     bitbucket: bitbucket::BitbucketCredentials,
     run_interval: Interval,
     stdout_broadcast: Option<bool>,
+    post_build: bool,
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
@@ -98,6 +99,7 @@ pub trait Repository {
     fn build_running(&self, pr: &PullRequest, build: &BuildDetails) -> Result<(), String>;
     fn build_success(&self, pr: &PullRequest, build: &BuildDetails) -> Result<(), String>;
     fn build_failure(&self, pr: &PullRequest, build: &BuildDetails) -> Result<(), String>;
+    fn post_build(&self, pr: &PullRequest, build: &BuildDetails) -> Result<(), String>;
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
@@ -290,23 +292,24 @@ fn handle_pull_request(pr: &PullRequest,
                        -> Result<(), String> {
     fanout.broadcast(&Message::new(OpCode::OpenPullRequest, &pr));
 
-    match get_latest_build(&pr, ci) {
+    match get_latest_build(pr, ci) {
         None => {
             fanout.broadcast(&Message::new(OpCode::BuildNotFound, &pr));
-            schedule_build(&pr, ci, repo).and_then(|build| {
+            schedule_build(pr, ci, repo).and_then(|build| {
                 fanout.broadcast(&Message::new(OpCode::BuildScheduled, &build));
                 Ok(())
             })
         }
         Some(build) => {
             fanout.broadcast(&Message::new(OpCode::BuildFound, &build));
-            check_build_status(&pr, &build, repo).and_then(|(build_state, build_status)| {
+            check_build_status(pr, &build, repo).and_then(|(build_state, build_status)| {
                 let opcode = match build_state {
                     BuildState::Queued => OpCode::BuildQueued,
                     BuildState::Running => OpCode::BuildRunning,
                     BuildState::Finished => OpCode::BuildFinished { success: build_status == BuildStatus::Success },
                 };
                 fanout.broadcast(&Message::new(opcode, &build));
+                repo.post_build(pr, &build)?;
                 Ok(())
             })
         }
@@ -443,6 +446,9 @@ mod tests {
         fn build_failure(&self, _: &PullRequest, _: &BuildDetails) -> Result<(), String> {
             self.failure.clone().to_owned()
         }
+        fn post_build(&self, _pr: &PullRequest, _build: &BuildDetails) -> Result<(), String> {
+            Ok(())
+        }
     }
 
     fn pull_request() -> PullRequest {
@@ -539,7 +545,6 @@ mod tests {
                 base_url: "https://www.example.com/bb/rest/api/latest".to_owned(),
                 project_slug: "foo".to_owned(),
                 repo_slug: "bar".to_owned(),
-                post_build: false,
             },
             teamcity: teamcity::TeamcityCredentials {
                 username: "username".to_owned(),
@@ -549,6 +554,7 @@ mod tests {
             },
             run_interval: Interval::Fixed { interval: 999u64 },
             stdout_broadcast: Some(false),
+            post_build: false,
         };
 
         let json_string = read_config("tests/fixtures/config.json", Cursor::new("")).unwrap();

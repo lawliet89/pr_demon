@@ -5,9 +5,9 @@ use std::option::Option;
 use hyper;
 use rustc_serialize::{json, Encodable};
 
-use ::fanout;
-use ::json_dictionary;
-use ::rest;
+use fanout;
+use json_dictionary;
+use rest;
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
@@ -150,7 +150,6 @@ pub struct BitbucketCredentials {
     pub base_url: String,
     pub project_slug: String,
     pub repo_slug: String,
-    pub post_build: bool,
 }
 
 pub struct Bitbucket {
@@ -201,9 +200,6 @@ impl ::Repository for Bitbucket {
     fn build_queued(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
         self.update_pr_build_status_comment(&pr, &build, &BuildState::INPROGRESS)
             .map_err(|err| format!("Error submitting comment: {}", err))?;
-        if self.credentials.post_build {
-            self.post_build(&build, &pr).map_err(|err| format!("Error posting build: {}", err))?;
-        }
         Ok(())
     }
 
@@ -214,19 +210,17 @@ impl ::Repository for Bitbucket {
     fn build_success(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
         self.update_pr_build_status_comment(&pr, &build, &BuildState::SUCCESSFUL)
             .map_err(|err| format!("Error submitting comment: {}", err))?;
-
-        if self.credentials.post_build {
-            self.post_build(&build, &pr).map_err(|err| format!("Error posting build: {}", err))?;
-        }
         Ok(())
     }
 
     fn build_failure(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
         self.update_pr_build_status_comment(&pr, &build, &BuildState::FAILED)
             .map_err(|err| format!("Error submitting comment: {}", err))?;
-        if self.credentials.post_build {
-            self.post_build(&build, &pr).map_err(|err| format!("Error posting build: {}", err))?;
-        }
+        Ok(())
+    }
+
+    fn post_build(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
+        self.post_build_status(pr, build)?;
         Ok(())
     }
 }
@@ -371,7 +365,7 @@ impl Bitbucket {
 
     }
 
-    fn post_build(&self, build: &::BuildDetails, pr: &::PullRequest) -> Result<Build, String> {
+    fn post_build_status(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<Build, String> {
         let bitbucket_build = Bitbucket::make_build(&build);
 
         let mut headers = rest::Headers::new();

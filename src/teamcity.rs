@@ -1,4 +1,4 @@
-use ::rest;
+use rest;
 use hyper;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
