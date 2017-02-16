@@ -257,7 +257,7 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
             .add_accept_json_header()
             .add_content_type_xml_header();
 
-        let logical_branch_name = format!("pull/{}", pr.id);
+        let logical_branch_name = format!("pull/{}/merge", pr.id);
         let body = format!(build_request_template!(),
                            branch_name = logical_branch_name,
                            build_id = self.build_id,

@@ -3,6 +3,7 @@ extern crate cron;
 extern crate docopt;
 extern crate fern;
 extern crate fusionner;
+extern crate git2;
 extern crate hyper;
 #[macro_use]
 extern crate log;
