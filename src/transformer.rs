@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use fusionner;
 
 macro_rules! map_err {
@@ -11,35 +12,13 @@ fn to_option_str(opt: &Option<String>) -> Option<&str> {
 }
 
 pub struct NoOp {}
+impl ::PrTransformer for NoOp {}
 
 pub struct Fusionner<'repo> {
     repo: fusionner::git::Repository<'repo>,
     config: fusionner::RepositoryConfiguration,
 }
 
-impl NoOp {
-    pub fn no_op(pr: ::PullRequest) -> Result<::PullRequest, String> {
-        Ok(pr)
-    }
-}
-
-impl ::PrTransformer for NoOp {
-    fn pre_build_retrieval(&self, pr: ::PullRequest) -> Result<::PullRequest, String> {
-        Self::no_op(pr)
-    }
-
-    fn pre_build_scheduling(&self, pr: ::PullRequest) -> Result<::PullRequest, String> {
-        Self::no_op(pr)
-    }
-
-    fn pre_build_checking(&self, pr: ::PullRequest, _build: &::BuildDetails) -> Result<::PullRequest, String> {
-        Self::no_op(pr)
-    }
-
-    fn pre_build_status_posting(&self, pr: ::PullRequest, _build: &::BuildDetails) -> Result<::PullRequest, String> {
-        Self::no_op(pr)
-    }
-}
 
 impl<'repo> Fusionner<'repo> {
     pub fn new(config: &'repo fusionner::RepositoryConfiguration) -> Result<Fusionner<'repo>, String> {
@@ -75,26 +54,47 @@ impl<'repo> Fusionner<'repo> {
     fn make_namer<'cb>(pr: &::PullRequest) -> Box<fusionner::merger::MergeReferenceNamerCallback<'cb>> {
         let pr_id = pr.id;
 
-        Box::new(move |_reference: _, _target_reference: _, _oid: _, _target_oid: _| {
+        Box::new(move |_reference : _, _target_reference : _, _oid : _, _target_oid : _| {
             format!("refs/pull/{}/merge", pr_id)
         })
     }
 }
 
 impl<'repo> ::PrTransformer for Fusionner<'repo> {
-    fn pre_build_retrieval(&self, pr: ::PullRequest) -> Result<::PullRequest, String> {
-        NoOp::no_op(pr)
+    fn prepare(&self, prs: &Vec<::PullRequest>) -> Result<(), String> {
+        let mut remote = map_err!(self.repo.remote(None))?;
+        let mut merger = map_err!(Self::make_merger(&self.repo,
+                                                    to_option_str(&self.config.notes_namespace),
+                                                    None))?;
+
+        let mut references = HashSet::<String>::new();
+        let mut commits = HashSet::<String>::new();
+
+        info!("Gathering references and commits from PRs to fetch from remote");
+        for pr in prs {
+            references.insert(pr.from_ref.to_string());
+            references.insert(pr.to_ref.to_string());
+            commits.insert(pr.from_commit.to_string());
+        }
+
+        info!("Fetching references");
+        debug!("{:?}", references);
+        let references_slice: Vec<&str> = references.iter().map(|s| &s[..]).collect();
+        map_err!(remote.fetch(&references_slice))?;
+
+        info!("Fetching notes for commits");
+        debug!("{:?}", commits);
+        let commits_slice: Vec<&str> = commits.iter().map(|s| &s[..]).collect();
+        map_err!(merger.fetch_notes(&commits_slice))?;
+
+        Ok(())
     }
 
-    fn pre_build_scheduling(&self, pr: ::PullRequest) -> Result<::PullRequest, String> {
-        NoOp::no_op(pr)
-    }
-
-    fn pre_build_checking(&self, pr: ::PullRequest, _build: &::BuildDetails) -> Result<::PullRequest, String> {
-        NoOp::no_op(pr)
-    }
-
-    fn pre_build_status_posting(&self, pr: ::PullRequest, _build: &::BuildDetails) -> Result<::PullRequest, String> {
-        NoOp::no_op(pr)
+    fn finalize(&self, _prs: &Vec<::PullRequest>) -> Result<(), String> {
+        let mut merger = map_err!(Self::make_merger(&self.repo,
+                                                    to_option_str(&self.config.notes_namespace),
+                                                    None))?;
+        map_err!(merger.push())?;
+        Ok(())
     }
 }

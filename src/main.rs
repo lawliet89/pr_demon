@@ -137,10 +137,29 @@ pub trait ContinuousIntegrator {
 }
 
 pub trait PrTransformer {
-    fn pre_build_retrieval(&self, pr: PullRequest) -> Result<PullRequest, String>;
-    fn pre_build_scheduling(&self, pr: PullRequest) -> Result<PullRequest, String>;
-    fn pre_build_checking(&self, pr: PullRequest, build: &BuildDetails) -> Result<PullRequest, String>;
-    fn pre_build_status_posting(&self, pr: PullRequest, build: &BuildDetails) -> Result<PullRequest, String>;
+    fn prepare(&self, _prs: &Vec<PullRequest>) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn pre_build_retrieval(&self, pr: PullRequest) -> Result<PullRequest, String> {
+        Ok(pr)
+    }
+
+    fn pre_build_scheduling(&self, pr: PullRequest) -> Result<PullRequest, String> {
+        Ok(pr)
+    }
+
+    fn pre_build_checking(&self, pr: PullRequest, _build: &BuildDetails) -> Result<PullRequest, String> {
+        Ok(pr)
+    }
+
+    fn pre_build_status_posting(&self, pr: PullRequest, _build: &BuildDetails) -> Result<PullRequest, String> {
+        Ok(pr)
+    }
+
+    fn finalize(&self, _prs: &Vec<PullRequest>) -> Result<(), String> {
+        Ok(())
+    }
 }
 
 fn main() {
@@ -194,9 +213,14 @@ fn main() {
             }
             Ok(prs) => {
                 info!("{}{} Open Pull Requests Found", prefix(0), prs.len());
-                for pr in prs {
+                if let Err(err) = pr_transformer.prepare(&prs) {
+                    error!("{}Error preparing PR Transformer: {}", prefix(0), err);
+                    continue;
+                }
+
+                for pr in &prs {
                     info!("{}Pull Request #{} ({})", prefix(1), pr.id, pr.web_url);
-                    if let Err(handled_pr) = handle_pull_request(pr,
+                    if let Err(handled_pr) = handle_pull_request(pr.clone(),
                                                                  &bitbucket,
                                                                  &config.teamcity,
                                                                  &*pr_transformer,
@@ -204,6 +228,10 @@ fn main() {
                                                                  config.post_build) {
                         error!("{}{}", prefix(2), handled_pr);
                     }
+                }
+
+                if let Err(err) = pr_transformer.finalize(&prs) {
+                    error!("{}Error finalizing PR Transformer: {}", prefix(0), err);
                 }
             }
         };
