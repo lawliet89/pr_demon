@@ -148,7 +148,6 @@ pub trait PrTransformer {
     fn pre_build_status_posting(&self, pr: PullRequest, build: &BuildDetails) -> Result<PullRequest, String>;
 }
 
-
 fn main() {
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.decode())
@@ -176,7 +175,7 @@ fn main() {
 
     let pr_transformer: Box<PrTransformer> = match config.fusionner {
         Some(ref config) => Box::new(transformer::Fusionner::new(config.clone())),
-        None => Box::new(transformer::NoOp {})
+        None => Box::new(transformer::NoOp {}),
     };
 
     let mut fixed_interval: Option<std::time::Duration> = None;
