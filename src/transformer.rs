@@ -180,6 +180,8 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
         let mut transformed_pr = pr.clone();
         transformed_pr.from_commit = format!("{}", pr_oid);
 
+        // FIXME: There is no good way to get back the original PR reference. How should we do this?
+
         info!("PR Commit: {}", transformed_pr.from_commit);
         debug!("Transformed PR {:?} reversed to {:?}", pr, transformed_pr);
         Ok(transformed_pr)
