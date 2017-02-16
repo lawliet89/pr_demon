@@ -185,3 +185,13 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
         Ok(transformed_pr)
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn fusionner_pre_build_retrieval_smoke_test() {}
+
+    #[test]
+    fn fusionner_pre_build_status_posting_smoke_test() {}
+}
