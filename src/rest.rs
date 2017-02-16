@@ -80,6 +80,8 @@ fn request_raw(url: &str,
                body: &Option<String>,
                headers: reqwest::header::Headers)
                -> Result<Response, Error> {
+
+    debug!("Requesting {} with {}", url, headers);
     let client = Client::new()?;
     let request_builder = client.request(method, url);
     let request_builder = request_builder.headers(headers);
@@ -88,7 +90,6 @@ fn request_raw(url: &str,
         Some(ref body_content) => request_builder.body(body_content.clone()),
         None => request_builder,
     };
-
     request_builder.send()
 }
 

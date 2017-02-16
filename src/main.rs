@@ -2,6 +2,7 @@ extern crate chrono;
 extern crate cron;
 extern crate docopt;
 extern crate fern;
+extern crate fusionner;
 extern crate hyper;
 #[macro_use]
 extern crate log;
@@ -12,6 +13,7 @@ extern crate url;
 
 mod bitbucket;
 mod fanout;
+mod transformer;
 mod json_dictionary;
 mod rest;
 mod teamcity;
@@ -54,6 +56,7 @@ struct Config {
     // TODO: Rename fields
     teamcity: teamcity::TeamcityCredentials,
     bitbucket: bitbucket::BitbucketCredentials,
+    fusionner: Option<fusionner::RepositoryConfiguration>,
     run_interval: Interval,
     stdout_broadcast: Option<bool>,
     post_build: bool,
@@ -133,10 +136,18 @@ pub struct BuildDetails {
 }
 
 pub trait ContinuousIntegrator {
-    fn get_build_list(&self, branch: &str) -> Result<Vec<Build>, String>;
+    fn get_build_list(&self, pr: &PullRequest) -> Result<Vec<Build>, String>;
     fn get_build(&self, build_id: i32) -> Result<BuildDetails, String>;
-    fn queue_build(&self, branch: &str) -> Result<BuildDetails, String>;
+    fn queue_build(&self, pr: &PullRequest) -> Result<BuildDetails, String>;
 }
+
+pub trait PrTransformer {
+    fn pre_build_retrieval(&self, pr: PullRequest) -> Result<PullRequest, String>;
+    fn pre_build_scheduling(&self, pr: PullRequest) -> Result<PullRequest, String>;
+    fn pre_build_checking(&self, pr: PullRequest, build: &BuildDetails) -> Result<PullRequest, String>;
+    fn pre_build_status_posting(&self, pr: PullRequest, build: &BuildDetails) -> Result<PullRequest, String>;
+}
+
 
 fn main() {
     let args: Args = Docopt::new(USAGE)
@@ -163,6 +174,11 @@ fn main() {
 
     let bitbucket = bitbucket::Bitbucket::new(&config.bitbucket, &fanout);
 
+    let pr_transformer: Box<PrTransformer> = match config.fusionner {
+        Some(ref config) => Box::new(transformer::Fusionner::new(config.clone())),
+        None => Box::new(transformer::NoOp {})
+    };
+
     let mut fixed_interval: Option<std::time::Duration> = None;
     let mut schedule: Option<CronSchedule> = None;
 
@@ -180,7 +196,12 @@ fn main() {
                 info!("{}{} Open Pull Requests Found", prefix(0), prs.len());
                 for pr in prs {
                     info!("{}Pull Request #{} ({})", prefix(1), pr.id, pr.web_url);
-                    if let Err(handled_pr) = handle_pull_request(&pr, &bitbucket, &config.teamcity, &fanout) {
+                    if let Err(handled_pr) = handle_pull_request(pr,
+                                                                 &bitbucket,
+                                                                 &config.teamcity,
+                                                                 &*pr_transformer,
+                                                                 &fanout,
+                                                                 config.post_build) {
                         error!("{}{}", prefix(2), handled_pr);
                     }
                 }
@@ -227,7 +248,7 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
     info!("{}Commit: {}", prefix(2), pr_commit);
     info!("{}Finding latest build from branch", prefix(2));
 
-    let latest_build = match ci.get_build_list(&branch_name) {
+    let latest_build = match ci.get_build_list(&pr) {
         Ok(ref build_list) => {
             if build_list.is_empty() {
                 info!("{}Build does not exist -- running build", prefix(2));
@@ -285,31 +306,40 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
     }
 }
 
-fn handle_pull_request(pr: &PullRequest,
+fn handle_pull_request(pr: PullRequest,
                        repo: &Repository,
                        ci: &ContinuousIntegrator,
-                       fanout: &Fanout<Message>)
+                       pr_transformer: &PrTransformer,
+                       fanout: &Fanout<Message>,
+                       post_build: bool)
                        -> Result<(), String> {
     fanout.broadcast(&Message::new(OpCode::OpenPullRequest, &pr));
 
-    match get_latest_build(pr, ci) {
+    let pr = pr_transformer.pre_build_retrieval(pr)?;
+
+    match get_latest_build(&pr, ci) {
         None => {
             fanout.broadcast(&Message::new(OpCode::BuildNotFound, &pr));
-            schedule_build(pr, ci, repo).and_then(|build| {
+            let pr = pr_transformer.pre_build_scheduling(pr)?;
+            schedule_build(&pr, ci, repo).and_then(|build| {
                 fanout.broadcast(&Message::new(OpCode::BuildScheduled, &build));
                 Ok(())
             })
         }
         Some(build) => {
             fanout.broadcast(&Message::new(OpCode::BuildFound, &build));
-            check_build_status(pr, &build, repo).and_then(|(build_state, build_status)| {
+            let pr = pr_transformer.pre_build_checking(pr, &build)?;
+            check_build_status(&pr, &build, repo).and_then(|(build_state, build_status)| {
                 let opcode = match build_state {
                     BuildState::Queued => OpCode::BuildQueued,
                     BuildState::Running => OpCode::BuildRunning,
                     BuildState::Finished => OpCode::BuildFinished { success: build_status == BuildStatus::Success },
                 };
                 fanout.broadcast(&Message::new(opcode, &build));
-                repo.post_build(pr, &build)?;
+                let pr = pr_transformer.pre_build_status_posting(pr, &build)?;
+                if post_build {
+                    repo.post_build(&pr, &build)?;
+                }
                 Ok(())
             })
         }
@@ -318,7 +348,7 @@ fn handle_pull_request(pr: &PullRequest,
 
 fn schedule_build(pr: &PullRequest, ci: &ContinuousIntegrator, repo: &Repository) -> Result<BuildDetails, String> {
     info!("{}Scheduling build", prefix(2));
-    let queued_build = ci.queue_build(&pr.branch_name());
+    let queued_build = ci.queue_build(pr);
     match queued_build {
         Err(err) => {
             error!("{}Error queuing build: {}", prefix(2), err);
@@ -405,7 +435,7 @@ mod tests {
     }
 
     impl ContinuousIntegrator for StubBuild {
-        fn get_build_list(&self, _: &str) -> Result<Vec<Build>, String> {
+        fn get_build_list(&self, _: &PullRequest) -> Result<Vec<Build>, String> {
             self.build_list.clone().to_owned()
         }
 
@@ -413,7 +443,7 @@ mod tests {
             self.build.clone().to_owned()
         }
 
-        fn queue_build(&self, _: &str) -> Result<BuildDetails, String> {
+        fn queue_build(&self, _: &PullRequest) -> Result<BuildDetails, String> {
             self.queued.clone().to_owned()
         }
     }
@@ -552,6 +582,7 @@ mod tests {
                 build_id: "foobar".to_owned(),
                 base_url: "https://www.foobar.com/rest".to_owned(),
             },
+            fusionner: None,
             run_interval: Interval::Fixed { interval: 999u64 },
             stdout_broadcast: Some(false),
             post_build: false,

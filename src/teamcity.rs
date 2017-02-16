@@ -203,12 +203,13 @@ pub struct Property {
 }
 
 impl ::ContinuousIntegrator for TeamcityCredentials {
-    fn get_build_list(&self, branch: &str) -> Result<Vec<::Build>, String> {
+    fn get_build_list(&self, pr: &::PullRequest) -> Result<Vec<::Build>, String> {
+        let branch = pr.branch_name();
         let mut headers = rest::Headers::new();
         headers.add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header();
 
-        let encoded_branch = utf8_percent_encode(branch, QUERY_ENCODE_SET).collect::<String>();
+        let encoded_branch = utf8_percent_encode(&branch, QUERY_ENCODE_SET).collect::<String>();
         let query_string = format!("state:any,branch:(name:{})", encoded_branch);
         let url = format!("{}/buildTypes/id:{}/builds?locator={}",
                           self.base_url,
@@ -238,7 +239,8 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
         Ok(build.to_build_details())
     }
 
-    fn queue_build(&self, branch: &str) -> Result<::BuildDetails, String> {
+    fn queue_build(&self, pr: &::PullRequest) -> Result<::BuildDetails, String> {
+        let branch = pr.branch_name();
         let mut headers = rest::Headers::new();
         headers.add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header()
