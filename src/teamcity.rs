@@ -221,7 +221,7 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
         headers.add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header();
 
-        let locator = format!("defaultFilter:false,state:any,revision:({})",
+        let locator = format!("defaultFilter:false,state:any,canceled:false,revision:({})",
                               pr.from_commit);
         let url = format!("{}/buildTypes/id:{}/builds?locator={}",
                           self.base_url,
