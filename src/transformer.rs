@@ -65,11 +65,19 @@ impl<'repo> Fusionner<'repo> {
         where 'repo: 'cb
     {
         let namer = match pr {
-            Some(pr) => Some(fusionner::merger::MergeReferenceNamer::Default),
+            Some(pr) => Some(fusionner::merger::MergeReferenceNamer::Custom(Self::make_namer(pr))),
             None => None,
         };
 
         map_err!(fusionner::merger::Merger::new(repo, None, namespace, namer))
+    }
+
+    fn make_namer<'cb>(pr: &::PullRequest) -> Box<fusionner::merger::MergeReferenceNamerCallback<'cb>> {
+        let pr_id = pr.id;
+
+        Box::new(move |_reference: _, _target_reference: _, _oid: _, _target_oid: _| {
+            format!("refs/pull/{}/merge", pr_id)
+        })
     }
 }
 

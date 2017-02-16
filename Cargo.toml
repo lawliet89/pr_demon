@@ -12,7 +12,7 @@ chrono = "0.3"
 cron = "0.0.2"
 docopt = "0.7.0"
 fern = "0.3"
-fusionner = { git = "https://github.com/lawliet89/fusionner", rev = "43fe016c54d4e745475cc365a4854dc200604974" }
+fusionner = { git = "https://github.com/lawliet89/fusionner", rev = "3cf01c71c3471d089190d07f88d6ffebfb5549f6" }
 hyper = "0.10"
 log = "0.3"
 reqwest = "0.4"
