@@ -83,13 +83,6 @@ pub struct PullRequest {
     pub author: User,
 }
 
-impl PullRequest {
-    fn branch_name(&self) -> String {
-        let git_ref = &self.from_ref;
-        git_ref.split('/').skip(2).collect::<Vec<_>>().join("/")
-    }
-}
-
 #[derive(RustcEncodable, RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct User {
     pub name: String,
@@ -240,12 +233,11 @@ fn parse_config(json: &str) -> Result<Config, String> {
 }
 
 fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<BuildDetails> {
-    let branch_name = pr.branch_name();
     let pr_commit = &pr.from_commit;
 
-    info!("{}Branch: {}", prefix(2), branch_name);
+    info!("{}Reference: {}", prefix(2), pr.from_ref);
     info!("{}Commit: {}", prefix(2), pr_commit);
-    info!("{}Finding latest build from branch", prefix(2));
+    info!("{}Finding latest build for commit", prefix(2));
 
     let latest_build = match ci.get_build_list(&pr) {
         Ok(ref build_list) => {

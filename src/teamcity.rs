@@ -1,6 +1,19 @@
 use rest;
 use hyper;
-use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
+
+macro_rules! build_request_template {
+    () => ("
+<build branchName=\"{branch_name}\">
+	<buildType id=\"{build_id}\" />
+	<lastChanges>
+		<change locator=\"version:{commit}\" />
+	</lastChanges>
+	<comment>
+		<text>Triggered by PR Demon for #{pr_id} {pr_url}</text>
+	</comment>
+</build>
+")
+}
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 pub struct TeamcityCredentials {
@@ -204,17 +217,16 @@ pub struct Property {
 
 impl ::ContinuousIntegrator for TeamcityCredentials {
     fn get_build_list(&self, pr: &::PullRequest) -> Result<Vec<::Build>, String> {
-        let branch = pr.branch_name();
         let mut headers = rest::Headers::new();
         headers.add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header();
 
-        let encoded_branch = utf8_percent_encode(&branch, QUERY_ENCODE_SET).collect::<String>();
-        let query_string = format!("state:any,branch:(name:{})", encoded_branch);
+        let locator = format!("defaultFilter:false,state:any,revision:({})",
+                              pr.from_commit);
         let url = format!("{}/buildTypes/id:{}/builds?locator={}",
                           self.base_url,
                           self.build_id,
-                          query_string);
+                          locator);
 
         let build_list = rest::get::<BuildList>(&url, headers.headers)
             .map_err(|err| format!("Error getting list of builds {}", err))?;
@@ -240,19 +252,18 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
     }
 
     fn queue_build(&self, pr: &::PullRequest) -> Result<::BuildDetails, String> {
-        let branch = pr.branch_name();
         let mut headers = rest::Headers::new();
         headers.add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header()
             .add_content_type_xml_header();
 
-        // FIXME: Format a proper template instead!
-        let body = format!("<build branchName=\"{}\">
-                          <buildType id=\"{}\"/>
-                          <comment><text>Triggered by PR Demon</text></comment>
-                        </build>",
-                           branch,
-                           self.build_id);
+        let logical_branch_name = format!("pull/{}", pr.id);
+        let body = format!(build_request_template!(),
+                           branch_name = logical_branch_name,
+                           build_id = self.build_id,
+                           commit = pr.from_commit,
+                           pr_id = pr.id,
+                           pr_url = pr.web_url);
         let url = format!("{}/buildQueue", self.base_url);
 
         let build =
