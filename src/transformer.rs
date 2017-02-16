@@ -47,7 +47,7 @@ impl<'repo> Fusionner<'repo> {
 
         {
             // One time setup of refspecs
-            let mut merger = Self::make_merger(&repo, to_option_str(&config.notes_namespace), None)?;
+            let merger = Self::make_merger(&repo, to_option_str(&config.notes_namespace), None)?;
             // Add the necessary refspecs
             map_err!(merger.add_note_refspecs())?;
         }

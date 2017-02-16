@@ -79,6 +79,8 @@ pub struct PullRequest {
     pub web_url: String,
     pub from_ref: String,
     pub from_commit: String,
+    pub to_ref: String,
+    pub to_commit: String,
     pub title: String,
     pub author: User,
 }
@@ -484,6 +486,8 @@ mod tests {
             web_url: "http://www.foobar.com/pr/111".to_owned(),
             from_ref: "refs/heads/branch_name".to_owned(),
             from_commit: "363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned(),
+            to_ref: "refs/heads/master".to_owned(),
+            to_commit: "363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned(),
             title: "A very important PR".to_owned(),
             author: User {
                 name: "Aaron Xiao Ming".to_owned(),

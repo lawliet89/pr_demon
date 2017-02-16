@@ -105,6 +105,8 @@ mod tests {
             web_url: "http://www.foobar.com".to_owned(),
             from_ref: "abc".to_owned(),
             from_commit: "ffffff".to_owned(),
+            to_ref: "abc".to_owned(),
+            to_commit: "ffffff".to_owned(),
             title: "A very important PR".to_owned(),
             author: User {
                 name: "Aaron Xiao Ming".to_owned(),

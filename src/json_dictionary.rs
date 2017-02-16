@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
-use rustc_serialize::{json, Decodable, Encodable};
+use rustc_serialize::{json, Encodable};
+#[cfg(test)]
+use rustc_serialize::Decodable;
 
 #[derive(RustcDecodable, RustcEncodable, PartialEq, Debug, Clone)]
 pub struct JsonDictionary {
@@ -11,16 +13,19 @@ impl JsonDictionary {
         JsonDictionary { dictionary: BTreeMap::new() }
     }
 
+    #[cfg(test)]
     pub fn clear(&mut self) {
         self.dictionary.clear();
     }
 
+    #[cfg(test)]
     pub fn get<T>(&self, key: &str) -> Option<Result<T, json::DecoderError>>
         where T: Decodable
     {
         self.dictionary.get(key).map(|json| json::decode(json))
     }
 
+    #[cfg(test)]
     pub fn contains_key(&self, key: &str) -> bool {
         self.dictionary.contains_key(key)
     }
@@ -33,14 +38,17 @@ impl JsonDictionary {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn remove(&mut self, key: &str) -> bool {
         self.dictionary.remove(key).is_some()
     }
 
+    #[cfg(test)]
     pub fn len(&self) -> usize {
         self.dictionary.len()
     }
 
+    #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.dictionary.is_empty()
     }
