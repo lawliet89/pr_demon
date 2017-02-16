@@ -87,7 +87,7 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
 
         info!("Fetching references");
         debug!("{:?}", references);
-        let references_slice: Vec<&str> = references.iter().map(|s| &s[..]).collect();
+        let references_slice: Vec<&str> = references.iter().map(|s| &**s).collect();
         map_err!(remote.fetch(&references_slice))?;
 
         info!("Fetching notes for commits");
@@ -149,7 +149,7 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
 
         let mut remote = map_err!(self.repo.remote(None))?;
         let notes_reference = merger.notes_reference();
-        let refspecs = [&merge.merge_reference[..], &notes_reference[..]];
+        let refspecs = [&*merge.merge_reference, &*notes_reference];
         info!("Pushing to {:?}", refspecs);
         map_err!(remote.push(&refspecs))?;
 
