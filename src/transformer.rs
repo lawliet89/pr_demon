@@ -1,8 +1,19 @@
 use fusionner;
 
+macro_rules! map_err {
+    ($x:expr) => {
+        $x.map_err(|e| format!("{:?}", e))
+    }
+}
+
+fn to_option_str(opt: &Option<String>) -> Option<&str> {
+    opt.as_ref().map(|s| &**s)
+}
+
 pub struct NoOp {}
 
-pub struct Fusionner {
+pub struct Fusionner<'repo> {
+    repo: fusionner::git::Repository<'repo>,
     config: fusionner::RepositoryConfiguration,
 }
 
@@ -30,13 +41,39 @@ impl ::PrTransformer for NoOp {
     }
 }
 
-impl Fusionner {
-    pub fn new(config: fusionner::RepositoryConfiguration) -> Fusionner {
-        Fusionner { config: config }
+impl<'repo> Fusionner<'repo> {
+    pub fn new(config: &'repo fusionner::RepositoryConfiguration) -> Result<Fusionner<'repo>, String> {
+        let repo = map_err!(fusionner::git::Repository::<'repo>::clone_or_open(&config))?;
+
+        {
+            // One time setup of refspecs
+            let mut merger = Self::make_merger(&repo, to_option_str(&config.notes_namespace), None)?;
+            // Add the necessary refspecs
+            map_err!(merger.add_note_refspecs())?;
+        }
+
+        Ok(Fusionner {
+            repo: repo,
+            config: config.clone(),
+        })
+    }
+
+    fn make_merger<'cb>(repo: &'repo fusionner::git::Repository<'repo>,
+                        namespace: Option<&str>,
+                        pr: Option<&::PullRequest>)
+                        -> Result<fusionner::merger::Merger<'repo, 'cb>, String>
+        where 'repo: 'cb
+    {
+        let namer = match pr {
+            Some(pr) => Some(fusionner::merger::MergeReferenceNamer::Default),
+            None => None,
+        };
+
+        map_err!(fusionner::merger::Merger::new(repo, None, namespace, namer))
     }
 }
 
-impl ::PrTransformer for Fusionner {
+impl<'repo> ::PrTransformer for Fusionner<'repo> {
     fn pre_build_retrieval(&self, pr: ::PullRequest) -> Result<::PullRequest, String> {
         NoOp::no_op(pr)
     }

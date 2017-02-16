@@ -167,7 +167,13 @@ fn main() {
     let bitbucket = bitbucket::Bitbucket::new(&config.bitbucket, &fanout);
 
     let pr_transformer: Box<PrTransformer> = match config.fusionner {
-        Some(ref config) => Box::new(transformer::Fusionner::new(config.clone())),
+        Some(ref config) => {
+            let transformer = transformer::Fusionner::new(config);
+            if let Err(err) = transformer {
+                panic!("Failed to initialise Fusionner: {}", err)
+            }
+            Box::new(transformer.unwrap())
+        }
         None => Box::new(transformer::NoOp {}),
     };
 
