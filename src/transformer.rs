@@ -96,6 +96,7 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
         Ok(())
     }
 
+    /// Transform PR with commits into merge commit
     fn pre_build_retrieval(&self, pr: ::PullRequest) -> Result<::PullRequest, String> {
         let merger = map_err!(Self::make_merger(&self.repo,
                                                 to_option_str(&self.config.notes_namespace),
@@ -160,6 +161,27 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
         info!("Merge Commit: {}", merge.merge_oid);
         info!("Merge Reference: {}", merge.merge_reference);
         debug!("PR {:?} transformed to {:?}", pr, transformed_pr);
+        Ok(transformed_pr)
+    }
+
+    /// Reverse transform PR with merge commit into original commits
+    fn pre_build_status_posting(&self, pr: ::PullRequest, _build: &::BuildDetails) -> Result<::PullRequest, String> {
+        let merge_oid = map_err!(git2::Oid::from_str(&pr.from_commit))?;
+        let target_oid = map_err!(git2::Oid::from_str(&pr.to_commit))?;
+        let merge_commit = map_err!(self.repo.repository.find_commit(merge_oid))?;
+
+        let pr_oid: Vec<git2::Oid> = merge_commit.parent_ids().filter(|oid| *oid != target_oid).collect();
+
+        if pr_oid.len() != 1 {
+            return Err(format!("Exactly one non-target OID was not found: {:?}", pr_oid));
+        }
+        let pr_oid = pr_oid[0];
+
+        let mut transformed_pr = pr.clone();
+        transformed_pr.from_commit = format!("{}", pr_oid);
+
+        info!("PR Commit: {}", transformed_pr.from_commit);
+        debug!("Transformed PR {:?} reversed to {:?}", pr, transformed_pr);
         Ok(transformed_pr)
     }
 }
