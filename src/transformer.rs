@@ -103,9 +103,9 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
 
     /// Transform PR with commits into merge commit
     fn pre_build_retrieval(&self, pr: ::PullRequest) -> Result<::PullRequest, String> {
-        let merger = map_err!(Self::make_merger(&self.repo,
-                                                to_option_str(&self.config.notes_namespace),
-                                                Some(&pr)))?;
+        let mut merger = map_err!(Self::make_merger(&self.repo,
+                                                    to_option_str(&self.config.notes_namespace),
+                                                    Some(&pr)))?;
 
         let oid = map_err!(git2::Oid::from_str(&pr.from_commit))?;
         let target_oid = map_err!(git2::Oid::from_str(&pr.to_commit))?;
