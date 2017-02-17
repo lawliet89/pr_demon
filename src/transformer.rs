@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use fusionner;
 use fusionner::merger;
 use git2;
 
@@ -106,52 +105,12 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
         let merger = map_err!(Self::make_merger(&self.repo,
                                                 to_option_str(&self.config.notes_namespace),
                                                 Some(&pr)))?;
-        let merge = {
-            let oid = map_err!(git2::Oid::from_str(&pr.from_commit))?;
-            let target_oid = map_err!(git2::Oid::from_str(&pr.to_commit))?;
-            let reference = &pr.from_ref;
-            let target_ref = &pr.to_ref;
 
-            let should_merge = merger.should_merge(oid, target_oid, reference, target_ref);
-            info!("Merging {} ({} into {})?: {:?}",
-                  reference,
-                  oid,
-                  target_oid,
-                  should_merge);
-
-            match should_merge {
-                merger::ShouldMergeResult::Merge(note) => {
-                    info!("Performing merge");
-                    let merge = map_err!(merger.merge(oid, target_oid, &reference, target_ref))?;
-
-                    let note = match note {
-                        None => merger::Note::new_with_merge(merge.clone()),
-                        Some(mut note) => {
-                            note.append_with_merge(merge.clone());
-                            note
-                        }
-                    };
-
-                    info!("Adding note: {:?}", note);
-                    map_err!(merger.add_note(&note, oid))?;
-                    merge
-                }
-                merger::ShouldMergeResult::ExistingMergeInSameTargetReference(note) => {
-                    info!("Merge commit is up to date");
-                    // Should be safe to unwrap
-                    note.merges.get(target_ref).unwrap().clone()
-                }
-                merger::ShouldMergeResult::ExistingMergeInDifferentTargetReference { mut note,
-                                                                                     merges,
-                                                                                     proposed_merge } => {
-                    info!("Merge found under other target references: {:?}", merges);
-                    note.append_with_merge(proposed_merge.clone());
-                    info!("Adding note: {:?}", note);
-                    map_err!(merger.add_note(&note, oid))?;
-                    proposed_merge
-                }
-            }
-        };
+        let oid = map_err!(git2::Oid::from_str(&pr.from_commit))?;
+        let target_oid = map_err!(git2::Oid::from_str(&pr.to_commit))?;
+        let reference = &pr.from_ref;
+        let target_ref = &pr.to_ref;
+        let merge = map_err!(merger.check_and_merge(oid, target_oid, reference, target_ref))?;
 
         let mut remote = map_err!(self.repo.remote(None))?;
         let notes_reference = merger.notes_reference();

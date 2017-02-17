@@ -23,7 +23,7 @@ impl JsonDictionary {
 #[cfg(test)]
 mod json_dictionary_tests {
     use super::JsonDictionary;
-    use rustc_serialize::{json};
+    use rustc_serialize::json;
 
     #[derive(RustcDecodable, RustcEncodable, PartialEq, Debug)]
     struct Payload {
