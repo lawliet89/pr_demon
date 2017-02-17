@@ -1,4 +1,4 @@
-FROM lawliet89/debian-rust:1.14.0
+FROM lawliet89/debian-rust:1.15.1
 MAINTAINER Yong Wen Chua <me@yongwen.xyz>
 
 RUN apt-get update \
