@@ -613,6 +613,7 @@ mod tests {
             },
             fusionner: Some(::transformer::FusionnerConfiguration {
                 notes_namespace: Some("foobar".to_string()),
+                push: Some(true),
                 repository: ::fusionner::RepositoryConfiguration {
                     uri: "https://www.example.com/stash/scm/eg/foobar.git".to_string(),
                     username: Some("username".to_string()),

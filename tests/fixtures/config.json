@@ -29,7 +29,8 @@
       "signature_name": "pr_demon",
       "signature_email": "pr_demon@example.com"
     },
-    "notes_namespace": "foobar"
+    "notes_namespace": "foobar",
+    "push": true
   },
   "stdout_broadcast": false,
   "post_build": false
