@@ -352,7 +352,7 @@ mod tests {
         };
 
         let transformer = not_err!(transformer::Fusionner::new(&transformer_config));
-        let merger = not_err!(transformer::Fusionner::make_merger(&transformer.repo, None, Some(&pr)));
+        let mut merger = not_err!(transformer::Fusionner::make_merger(&transformer.repo, None, Some(&pr)));
         let merge = not_err!(merger.check_and_merge(branch_oid, oid, reference, target_reference));
 
         let transformed_pr = not_err!(transformer.pre_build_retrieval(pr));
@@ -380,7 +380,7 @@ mod tests {
         };
 
         let transformer = not_err!(transformer::Fusionner::new(&transformer_config));
-        let merger = not_err!(transformer::Fusionner::make_merger(&transformer.repo, None, Some(&pr)));
+        let mut merger = not_err!(transformer::Fusionner::make_merger(&transformer.repo, None, Some(&pr)));
         let _merge = not_err!(merger.check_and_merge(branch_oid, oid, reference, target_reference));
 
         let transformed_pr = not_err!(transformer.pre_build_retrieval(pr));
