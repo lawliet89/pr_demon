@@ -190,7 +190,6 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
 
 #[cfg(test)]
 mod tests {
-
     #[test]
     fn fusionner_pre_build_retrieval_smoke_test() {}
 
