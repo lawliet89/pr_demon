@@ -86,8 +86,8 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
 
         info!("Gathering references and commits from PRs to fetch from remote");
         for pr in prs {
-            references.insert(pr.from_ref.to_string());
-            references.insert(pr.to_ref.to_string());
+            references.insert(format!("+{}", pr.from_ref.to_string()));
+            references.insert(format!("+{}", pr.to_ref.to_string()));
         }
 
         info!("Fetching references");
@@ -392,10 +392,11 @@ mod tests {
             commit: None,
             state: ::BuildState::Finished,
             status: ::BuildStatus::Success,
-            status_text: None
+            status_text: None,
         };
         let reverse_transformed_pr = not_err!(transformer.pre_build_status_posting(transformed_pr, &build_details));
 
-        assert_eq!(format!("{}", branch_oid), reverse_transformed_pr.from_commit);
+        assert_eq!(format!("{}", branch_oid),
+                   reverse_transformed_pr.from_commit);
     }
 }
