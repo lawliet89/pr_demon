@@ -18,15 +18,20 @@ fn to_option_str(opt: &Option<String>) -> Option<&str> {
 pub struct NoOp {}
 impl ::PrTransformer for NoOp {}
 
-pub struct Fusionner<'repo> {
-    repo: fusionner::git::Repository<'repo>,
-    config: fusionner::RepositoryConfiguration,
+#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+pub struct FusionnerConfiguration {
+    pub notes_namespace: Option<String>,
+    pub repository: fusionner::RepositoryConfiguration,
 }
 
+pub struct Fusionner<'repo> {
+    repo: fusionner::git::Repository<'repo>,
+    config: FusionnerConfiguration,
+}
 
 impl<'repo> Fusionner<'repo> {
-    pub fn new(config: &'repo fusionner::RepositoryConfiguration) -> Result<Fusionner<'repo>, String> {
-        let repo = map_err!(fusionner::git::Repository::<'repo>::clone_or_open(&config))?;
+    pub fn new(config: &'repo FusionnerConfiguration) -> Result<Fusionner<'repo>, String> {
+        let repo = map_err!(fusionner::git::Repository::<'repo>::clone_or_open(&config.repository))?;
 
         {
             // One time setup of refspecs

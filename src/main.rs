@@ -57,7 +57,7 @@ struct Config {
     // TODO: Rename fields
     teamcity: teamcity::TeamcityCredentials,
     bitbucket: bitbucket::BitbucketCredentials,
-    fusionner: Option<fusionner::RepositoryConfiguration>,
+    fusionner: Option<transformer::FusionnerConfiguration>,
     run_interval: Interval,
     stdout_broadcast: Option<bool>,
     post_build: bool,
@@ -597,22 +597,35 @@ mod tests {
 
     #[test]
     fn it_reads_and_parses_a_config_file() {
-
         let expected = Config {
             bitbucket: bitbucket::BitbucketCredentials {
-                username: "username".to_owned(),
-                password: "password".to_owned(),
-                base_url: "https://www.example.com/bb/rest/api/latest".to_owned(),
-                project_slug: "foo".to_owned(),
-                repo_slug: "bar".to_owned(),
+                username: "username".to_string(),
+                password: "password".to_string(),
+                base_url: "https://www.example.com/bb/rest/api/latest".to_string(),
+                project_slug: "foo".to_string(),
+                repo_slug: "bar".to_string(),
             },
             teamcity: teamcity::TeamcityCredentials {
-                username: "username".to_owned(),
-                password: "password".to_owned(),
-                build_id: "foobar".to_owned(),
-                base_url: "https://www.foobar.com/rest".to_owned(),
+                username: "username".to_string(),
+                password: "password".to_string(),
+                build_id: "foobar".to_string(),
+                base_url: "https://www.foobar.com/rest".to_string(),
             },
-            fusionner: None,
+            fusionner: Some(::transformer::FusionnerConfiguration {
+                notes_namespace: Some("foobar".to_string()),
+                repository: ::fusionner::RepositoryConfiguration {
+                    uri: "https://www.example.com/stash/scm/eg/foobar.git".to_string(),
+                    username: Some("username".to_string()),
+                    password: Some("password".to_string()),
+                    key: None,
+                    key_passphrase: None,
+                    checkout_path: "target/test_repo".to_string(),
+                    fetch_refspecs: vec![],
+                    push_refspecs: vec![],
+                    signature_name: Some("pr_demon".to_string()),
+                    signature_email: Some("pr_demon@example.com".to_string()),
+                },
+            }),
             run_interval: Interval::Fixed { interval: 999u64 },
             stdout_broadcast: Some(false),
             post_build: false,
