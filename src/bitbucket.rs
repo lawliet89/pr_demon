@@ -184,13 +184,15 @@ impl ::Repository for Bitbucket {
             .map(|ref pr| {
                 ::PullRequest {
                     id: pr.id,
-                    web_url: pr.links["self"][0].href.to_owned(),
-                    from_ref: pr.fromRef.id.to_owned(),
-                    from_commit: pr.fromRef.latestCommit.to_owned(),
-                    title: pr.title.to_owned(),
+                    web_url: pr.links["self"][0].href.to_string(),
+                    from_ref: pr.fromRef.id.to_string(),
+                    from_commit: pr.fromRef.latestCommit.to_string(),
+                    to_ref: pr.toRef.id.to_string(),
+                    to_commit: pr.toRef.latestCommit.to_string(),
+                    title: pr.title.to_string(),
                     author: ::User {
-                        name: pr.author.user.displayName.to_owned(),
-                        email: pr.author.user.emailAddress.to_owned(),
+                        name: pr.author.user.displayName.to_string(),
+                        email: pr.author.user.emailAddress.to_string(),
                     },
                 }
             })

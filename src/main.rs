@@ -3,6 +3,7 @@ extern crate cron;
 extern crate docopt;
 extern crate fern;
 extern crate fusionner;
+extern crate git2;
 extern crate hyper;
 #[macro_use]
 extern crate log;
@@ -56,7 +57,7 @@ struct Config {
     // TODO: Rename fields
     teamcity: teamcity::TeamcityCredentials,
     bitbucket: bitbucket::BitbucketCredentials,
-    fusionner: Option<fusionner::RepositoryConfiguration>,
+    fusionner: Option<transformer::FusionnerConfiguration>,
     run_interval: Interval,
     stdout_broadcast: Option<bool>,
     post_build: bool,
@@ -79,6 +80,8 @@ pub struct PullRequest {
     pub web_url: String,
     pub from_ref: String,
     pub from_commit: String,
+    pub to_ref: String,
+    pub to_commit: String,
     pub title: String,
     pub author: User,
 }
@@ -135,10 +138,29 @@ pub trait ContinuousIntegrator {
 }
 
 pub trait PrTransformer {
-    fn pre_build_retrieval(&self, pr: PullRequest) -> Result<PullRequest, String>;
-    fn pre_build_scheduling(&self, pr: PullRequest) -> Result<PullRequest, String>;
-    fn pre_build_checking(&self, pr: PullRequest, build: &BuildDetails) -> Result<PullRequest, String>;
-    fn pre_build_status_posting(&self, pr: PullRequest, build: &BuildDetails) -> Result<PullRequest, String>;
+    fn prepare(&self, _prs: &Vec<PullRequest>) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn pre_build_retrieval(&self, pr: PullRequest) -> Result<PullRequest, String> {
+        Ok(pr)
+    }
+
+    fn pre_build_scheduling(&self, pr: PullRequest) -> Result<PullRequest, String> {
+        Ok(pr)
+    }
+
+    fn pre_build_checking(&self, pr: PullRequest, _build: &BuildDetails) -> Result<PullRequest, String> {
+        Ok(pr)
+    }
+
+    fn pre_build_status_posting(&self, pr: PullRequest, _build: &BuildDetails) -> Result<PullRequest, String> {
+        Ok(pr)
+    }
+
+    fn finalize(&self, _prs: &Vec<PullRequest>) -> Result<(), String> {
+        Ok(())
+    }
 }
 
 fn main() {
@@ -167,7 +189,13 @@ fn main() {
     let bitbucket = bitbucket::Bitbucket::new(&config.bitbucket, &fanout);
 
     let pr_transformer: Box<PrTransformer> = match config.fusionner {
-        Some(ref config) => Box::new(transformer::Fusionner::new(config.clone())),
+        Some(ref config) => {
+            let transformer = transformer::Fusionner::new(config);
+            if let Err(err) = transformer {
+                panic!("Failed to initialise Fusionner: {}", err)
+            }
+            Box::new(transformer.unwrap())
+        }
         None => Box::new(transformer::NoOp {}),
     };
 
@@ -186,9 +214,14 @@ fn main() {
             }
             Ok(prs) => {
                 info!("{}{} Open Pull Requests Found", prefix(0), prs.len());
-                for pr in prs {
+                if let Err(err) = pr_transformer.prepare(&prs) {
+                    error!("{}Error preparing PR Transformer: {}", prefix(0), err);
+                    continue;
+                }
+
+                for pr in &prs {
                     info!("{}Pull Request #{} ({})", prefix(1), pr.id, pr.web_url);
-                    if let Err(handled_pr) = handle_pull_request(pr,
+                    if let Err(handled_pr) = handle_pull_request(pr.clone(),
                                                                  &bitbucket,
                                                                  &config.teamcity,
                                                                  &*pr_transformer,
@@ -196,6 +229,10 @@ fn main() {
                                                                  config.post_build) {
                         error!("{}{}", prefix(2), handled_pr);
                     }
+                }
+
+                if let Err(err) = pr_transformer.finalize(&prs) {
+                    error!("{}Error finalizing PR Transformer: {}", prefix(0), err);
                 }
             }
         };
@@ -478,6 +515,8 @@ mod tests {
             web_url: "http://www.foobar.com/pr/111".to_owned(),
             from_ref: "refs/heads/branch_name".to_owned(),
             from_commit: "363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned(),
+            to_ref: "refs/heads/master".to_owned(),
+            to_commit: "363c1dfda4cdf5a01c2d210e49942c8c8e7e898b".to_owned(),
             title: "A very important PR".to_owned(),
             author: User {
                 name: "Aaron Xiao Ming".to_owned(),
@@ -558,22 +597,36 @@ mod tests {
 
     #[test]
     fn it_reads_and_parses_a_config_file() {
-
         let expected = Config {
             bitbucket: bitbucket::BitbucketCredentials {
-                username: "username".to_owned(),
-                password: "password".to_owned(),
-                base_url: "https://www.example.com/bb/rest/api/latest".to_owned(),
-                project_slug: "foo".to_owned(),
-                repo_slug: "bar".to_owned(),
+                username: "username".to_string(),
+                password: "password".to_string(),
+                base_url: "https://www.example.com/bb/rest/api/latest".to_string(),
+                project_slug: "foo".to_string(),
+                repo_slug: "bar".to_string(),
             },
             teamcity: teamcity::TeamcityCredentials {
-                username: "username".to_owned(),
-                password: "password".to_owned(),
-                build_id: "foobar".to_owned(),
-                base_url: "https://www.foobar.com/rest".to_owned(),
+                username: "username".to_string(),
+                password: "password".to_string(),
+                build_id: "foobar".to_string(),
+                base_url: "https://www.foobar.com/rest".to_string(),
             },
-            fusionner: None,
+            fusionner: Some(::transformer::FusionnerConfiguration {
+                notes_namespace: Some("foobar".to_string()),
+                push: Some(true),
+                repository: ::fusionner::RepositoryConfiguration {
+                    uri: "https://www.example.com/stash/scm/eg/foobar.git".to_string(),
+                    username: Some("username".to_string()),
+                    password: Some("password".to_string()),
+                    key: None,
+                    key_passphrase: None,
+                    checkout_path: "target/test_repo".to_string(),
+                    fetch_refspecs: vec![],
+                    push_refspecs: vec![],
+                    signature_name: Some("pr_demon".to_string()),
+                    signature_email: Some("pr_demon@example.com".to_string()),
+                },
+            }),
             run_interval: Interval::Fixed { interval: 999u64 },
             stdout_broadcast: Some(false),
             post_build: false,
