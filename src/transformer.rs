@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use fusionner::merger;
+use fusionner;
 use git2;
 
 static DEFAULT_REFSPEC: &'static str = "refs/pull/*";
