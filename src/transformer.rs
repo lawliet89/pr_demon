@@ -116,9 +116,13 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
         if self.config.push != Some(false) {
             let mut remote = map_err!(self.repo.remote(None))?;
             let notes_reference = merger.notes_reference();
-            let refspecs = [&*merge.merge_reference, &*notes_reference];
+            let refspecs: Vec<String> = [&merge.merge_reference, &notes_reference]
+                .iter()
+                .map(|s| format!("+{}", s))
+                .collect();
+            let refspecs_slice: Vec<&str> = refspecs.iter().map(|s| &**s).collect();
             info!("Pushing to {:?}", refspecs);
-            map_err!(remote.push(&refspecs))?;
+            map_err!(remote.push(&refspecs_slice))?;
         }
 
         let mut transformed_pr = pr.clone();

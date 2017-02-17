@@ -5,10 +5,10 @@ RUN apt-get update \
     && apt-get install -y cmake pkg-config
 
 COPY Cargo.toml Cargo.lock ./
-RUN cargo fetch
+RUN cargo fetch --locked
 
 COPY . ./
-RUN cargo build --release
+RUN cargo build --release --locked
 
 VOLUME /app/src/config
 
