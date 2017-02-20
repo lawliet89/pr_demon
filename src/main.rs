@@ -136,30 +136,51 @@ pub trait ContinuousIntegrator {
     fn get_build_list(&self, pr: &PullRequest) -> Result<Vec<Build>, String>;
     fn get_build(&self, build_id: i32) -> Result<BuildDetails, String>;
     fn queue_build(&self, pr: &PullRequest) -> Result<BuildDetails, String>;
+    fn refresh_vcs(&self, _pr: &PullRequest) -> Result<(), String> {
+        Ok(())
+    }
 }
 
 pub trait PrTransformer {
-    fn prepare(&self, _prs: &Vec<PullRequest>) -> Result<(), String> {
+    fn prepare(&self, _prs: &Vec<PullRequest>, _repo: &Repository, _ci: &ContinuousIntegrator) -> Result<(), String> {
         Ok(())
     }
 
-    fn pre_build_retrieval(&self, pr: PullRequest) -> Result<PullRequest, String> {
+    fn pre_build_retrieval(&self,
+                           pr: PullRequest,
+                           _repo: &Repository,
+                           _ci: &ContinuousIntegrator)
+                           -> Result<PullRequest, String> {
         Ok(pr)
     }
 
-    fn pre_build_scheduling(&self, pr: PullRequest) -> Result<PullRequest, String> {
+    fn pre_build_scheduling(&self,
+                            pr: PullRequest,
+                            _repo: &Repository,
+                            _ci: &ContinuousIntegrator)
+                            -> Result<PullRequest, String> {
         Ok(pr)
     }
 
-    fn pre_build_checking(&self, pr: PullRequest, _build: &BuildDetails) -> Result<PullRequest, String> {
+    fn pre_build_checking(&self,
+                          pr: PullRequest,
+                          _build: &BuildDetails,
+                          _repo: &Repository,
+                          _ci: &ContinuousIntegrator)
+                          -> Result<PullRequest, String> {
         Ok(pr)
     }
 
-    fn pre_build_status_posting(&self, pr: PullRequest, _build: &BuildDetails) -> Result<PullRequest, String> {
+    fn pre_build_status_posting(&self,
+                                pr: PullRequest,
+                                _build: &BuildDetails,
+                                _repo: &Repository,
+                                _ci: &ContinuousIntegrator)
+                                -> Result<PullRequest, String> {
         Ok(pr)
     }
 
-    fn finalize(&self, _prs: &Vec<PullRequest>) -> Result<(), String> {
+    fn finalize(&self, _prs: &Vec<PullRequest>, _repo: &Repository, _ci: &ContinuousIntegrator) -> Result<(), String> {
         Ok(())
     }
 }
@@ -215,7 +236,7 @@ fn main() {
             }
             Ok(prs) => {
                 info!("{}{} Open Pull Requests Found", prefix(0), prs.len());
-                if let Err(err) = pr_transformer.prepare(&prs) {
+                if let Err(err) = pr_transformer.prepare(&prs, &bitbucket, &config.teamcity) {
                     error!("{}Error preparing PR Transformer: {}", prefix(0), err);
                     continue;
                 }
@@ -232,7 +253,7 @@ fn main() {
                     }
                 }
 
-                if let Err(err) = pr_transformer.finalize(&prs) {
+                if let Err(err) = pr_transformer.finalize(&prs, &bitbucket, &config.teamcity) {
                     error!("{}Error finalizing PR Transformer: {}", prefix(0), err);
                 }
             }
@@ -280,7 +301,7 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
     let latest_build = match ci.get_build_list(&pr) {
         Ok(ref build_list) => {
             if build_list.is_empty() {
-                info!("{}Build does not exist -- running build", prefix(2));
+                info!("{}Build does not exist — running build", prefix(2));
                 None
             } else {
                 let latest_build_id = build_list.first().unwrap().id;
@@ -300,7 +321,7 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
             }
         }
         Err(err) => {
-            warn!("{}Error fetching builds -- queuing anyway: {}",
+            warn!("{}Error fetching builds — queuing anyway: {}",
                   prefix(2),
                   err);
             None
@@ -313,21 +334,21 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
             match build.commit {
                 Some(ref commit) => {
                     if commit == pr_commit {
-                        info!("{}Commit matches -- skipping", prefix(2));
+                        info!("{}Commit matches — skipping", prefix(2));
                         Some(build.to_owned())
                     } else {
-                        info!("{}Commit does not match with {} -- scheduling build",
+                        info!("{}Commit does not match with {} — scheduling build",
                               prefix(2),
                               commit);
                         None
                     }
                 }
                 None if build.state == BuildState::Queued => {
-                    info!("{}Build is queued -- skipping", prefix(2));
+                    info!("{}Build is queued — skipping", prefix(2));
                     Some(build.to_owned())
                 }
                 _ => {
-                    warn!("{}Unknown error -- scheduling build", prefix(2));
+                    warn!("{}Unknown error — scheduling build", prefix(2));
                     None
                 }
             }
@@ -344,12 +365,12 @@ fn handle_pull_request(pr: PullRequest,
                        -> Result<(), String> {
     fanout.broadcast(&Message::new(OpCode::OpenPullRequest, &pr));
 
-    let pr = pr_transformer.pre_build_retrieval(pr)?;
+    let pr = pr_transformer.pre_build_retrieval(pr, repo, ci)?;
 
     match get_latest_build(&pr, ci) {
         None => {
             fanout.broadcast(&Message::new(OpCode::BuildNotFound, &pr));
-            let pr = pr_transformer.pre_build_scheduling(pr)?;
+            let pr = pr_transformer.pre_build_scheduling(pr, repo, ci)?;
             schedule_build(&pr, ci, repo).and_then(|build| {
                 fanout.broadcast(&Message::new(OpCode::BuildScheduled, &build));
                 Ok(())
@@ -357,7 +378,7 @@ fn handle_pull_request(pr: PullRequest,
         }
         Some(build) => {
             fanout.broadcast(&Message::new(OpCode::BuildFound, &build));
-            let pr = pr_transformer.pre_build_checking(pr, &build)?;
+            let pr = pr_transformer.pre_build_checking(pr, &build, repo, ci)?;
             check_build_status(&pr, &build, repo).and_then(|(build_state, build_status)| {
                 let opcode = match build_state {
                     BuildState::Queued => OpCode::BuildQueued,
@@ -365,7 +386,7 @@ fn handle_pull_request(pr: PullRequest,
                     BuildState::Finished => OpCode::BuildFinished { success: build_status == BuildStatus::Success },
                 };
                 fanout.broadcast(&Message::new(opcode, &build));
-                let pr = pr_transformer.pre_build_status_posting(pr, &build)?;
+                let pr = pr_transformer.pre_build_status_posting(pr, &build, repo, ci)?;
                 if post_build {
                     repo.post_build(&pr, &build)?;
                 }

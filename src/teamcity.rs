@@ -274,4 +274,21 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
                                 &hyper::status::StatusCode::Ok).map_err(|err| format!("Error queuing build {}", err))?;
         Ok(build.to_build_details())
     }
+
+    fn refresh_vcs(&self, _pr: &::PullRequest) -> Result<(), String> {
+        let mut headers = rest::Headers::new();
+        headers.add_authorization_header(self as &::UsernameAndPassword)
+            .add_accept_json_header();
+
+        let url = format!("{}/vcs-root-instances/checkingForChangesQueue?locator=buildType(id:{})",
+                          self.base_url,
+                          self.build_id);
+
+        let response =
+            rest::post_raw(&url, "", headers.headers).map_err(|err| format!("Error requesting for VCS fetch {}", err))?;
+        match response.status() {
+            status if status == &hyper::status::StatusCode::Ok => Ok(()),
+            e @ _ => Err(e.to_string()),
+        }
+    }
 }

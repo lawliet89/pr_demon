@@ -76,7 +76,11 @@ impl<'repo> Fusionner<'repo> {
 }
 
 impl<'repo> ::PrTransformer for Fusionner<'repo> {
-    fn prepare(&self, prs: &Vec<::PullRequest>) -> Result<(), String> {
+    fn prepare(&self,
+               prs: &Vec<::PullRequest>,
+               _repo: &::Repository,
+               _ci: &::ContinuousIntegrator)
+               -> Result<(), String> {
         let mut remote = map_err!(self.repo.remote(None))?;
         let mut merger = map_err!(Self::make_merger(&self.repo,
                                                     to_option_str(&self.config.notes_namespace),
@@ -102,7 +106,11 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
     }
 
     /// Transform PR with commits into merge commit
-    fn pre_build_retrieval(&self, pr: ::PullRequest) -> Result<::PullRequest, String> {
+    fn pre_build_retrieval(&self,
+                           pr: ::PullRequest,
+                           _repo: &::Repository,
+                           ci: &::ContinuousIntegrator)
+                           -> Result<::PullRequest, String> {
         let mut merger = map_err!(Self::make_merger(&self.repo,
                                                     to_option_str(&self.config.notes_namespace),
                                                     Some(&pr)))?;
@@ -121,11 +129,18 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
         info!("Merge Commit: {}", merge.merge_oid);
         info!("Merge Reference: {}", merge.merge_reference);
         debug!("PR {:?} transformed to {:?}", pr, transformed_pr);
+
+        ci.refresh_vcs(&transformed_pr)?;
         Ok(transformed_pr)
     }
 
     /// Reverse transform PR with merge commit into original commits
-    fn pre_build_status_posting(&self, pr: ::PullRequest, _build: &::BuildDetails) -> Result<::PullRequest, String> {
+    fn pre_build_status_posting(&self,
+                                pr: ::PullRequest,
+                                _build: &::BuildDetails,
+                                _repo: &::Repository,
+                                _ci: &::ContinuousIntegrator)
+                                -> Result<::PullRequest, String> {
         let merge_oid = map_err!(git2::Oid::from_str(&pr.from_commit))?;
         let target_oid = map_err!(git2::Oid::from_str(&pr.to_commit))?;
         let merge_commit = map_err!(self.repo.repository.find_commit(merge_oid))?;
@@ -179,6 +194,62 @@ mod tests {
             Some(e) => e,
             None => panic!("{} failed with None", stringify!($e)),
         })
+    }
+
+    struct StubRepository {}
+
+    impl ::Repository for StubRepository {
+        fn get_pr_list(&self) -> Result<Vec<::PullRequest>, String> {
+            Ok(vec![])
+        }
+
+        fn build_queued(&self, _: &::PullRequest, _: &::BuildDetails) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn build_running(&self, _: &::PullRequest, _: &::BuildDetails) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn build_success(&self, _: &::PullRequest, _: &::BuildDetails) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn build_failure(&self, _: &::PullRequest, _: &::BuildDetails) -> Result<(), String> {
+            Ok(())
+        }
+        fn post_build(&self, _pr: &::PullRequest, _build: &::BuildDetails) -> Result<(), String> {
+            Ok(())
+        }
+    }
+
+    struct StubCi {}
+
+    impl StubCi {
+        fn stub_details() -> ::BuildDetails {
+            ::BuildDetails {
+                id: 0,
+                build_id: "foobar".to_string(),
+                web_url: "http://www.example.com".to_string(),
+                commit: None,
+                branch_name: "foobar".to_string(),
+                state: ::BuildState::Finished,
+                status: ::BuildStatus::Success,
+                status_text: None,
+            }
+        }
+    }
+
+    impl ::ContinuousIntegrator for StubCi {
+        fn get_build_list(&self, _pr: &::PullRequest) -> Result<Vec<::Build>, String> {
+            Ok(vec![])
+        }
+        fn get_build(&self, _build_id: i32) -> Result<::BuildDetails, String> {
+            Ok(Self::stub_details())
+        }
+        fn queue_build(&self, _pr: &::PullRequest) -> Result<::BuildDetails, String> {
+            Ok(Self::stub_details())
+        }
     }
 
     fn raw_repo_init() -> (TempDir, git2::Repository) {
@@ -316,7 +387,7 @@ mod tests {
         };
         let transformer = not_err!(transformer::Fusionner::new(&transformer_config));
 
-        let transformed_pr = not_err!(transformer.pre_build_retrieval(pr));
+        let transformed_pr = not_err!(transformer.pre_build_retrieval(pr, &StubRepository {}, &StubCi {}));
 
         assert_eq!("refs/pull/1/merge", transformed_pr.from_ref);
         assert!(transformed_pr.from_commit != format!("{}", branch_oid));
@@ -344,7 +415,7 @@ mod tests {
         let mut merger = not_err!(transformer::Fusionner::make_merger(&transformer.repo, None, Some(&pr)));
         let merge = not_err!(merger.check_and_merge(branch_oid, oid, reference, target_reference, false));
 
-        let transformed_pr = not_err!(transformer.pre_build_retrieval(pr));
+        let transformed_pr = not_err!(transformer.pre_build_retrieval(pr, &StubRepository {}, &StubCi {}));
 
         assert_eq!(merge.merge_oid, transformed_pr.from_commit);
         assert_eq!(merge.merge_reference, transformed_pr.from_ref);
@@ -372,7 +443,7 @@ mod tests {
         let mut merger = not_err!(transformer::Fusionner::make_merger(&transformer.repo, None, Some(&pr)));
         let _merge = not_err!(merger.check_and_merge(branch_oid, oid, reference, target_reference, false));
 
-        let transformed_pr = not_err!(transformer.pre_build_retrieval(pr));
+        let transformed_pr = not_err!(transformer.pre_build_retrieval(pr, &StubRepository {}, &StubCi {}));
 
         let build_details = ::BuildDetails {
             id: 0,
@@ -384,7 +455,10 @@ mod tests {
             status: ::BuildStatus::Success,
             status_text: None,
         };
-        let reverse_transformed_pr = not_err!(transformer.pre_build_status_posting(transformed_pr, &build_details));
+        let reverse_transformed_pr = not_err!(transformer.pre_build_status_posting(transformed_pr,
+                                                                                   &build_details,
+                                                                                   &StubRepository {},
+                                                                                   &StubCi {}));
 
         assert_eq!(format!("{}", branch_oid),
                    reverse_transformed_pr.from_commit);
