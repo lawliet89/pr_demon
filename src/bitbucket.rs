@@ -350,7 +350,7 @@ impl Bitbucket {
                 version: comment.version,
             })
             .unwrap();
-        let url = format!("{}/api/latest/projects/{}/repos/{}/pull-requests/{}/comments/{}",
+        let url = format!("{}/rest/api/latest/projects/{}/repos/{}/pull-requests/{}/comments/{}",
                           self.credentials.base_url,
                           self.credentials.project_slug,
                           self.credentials.repo_slug,
