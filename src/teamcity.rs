@@ -135,6 +135,7 @@ impl Build {
             build_id: self.buildTypeId.to_owned(),
             web_url: self.webUrl.to_owned(),
             commit: commit,
+            branch_name: self.branchName.to_string(),
             state: self.state.clone().to_build_state(),
             status: status,
             status_text: self.statusText.to_owned(),

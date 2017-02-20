@@ -379,6 +379,7 @@ mod tests {
             build_id: "foobar".to_string(),
             web_url: "http://www.example.com".to_string(),
             commit: None,
+            branch_name: "foobar".to_string(),
             state: ::BuildState::Finished,
             status: ::BuildStatus::Success,
             status_text: None,
