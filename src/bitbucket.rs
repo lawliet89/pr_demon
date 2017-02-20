@@ -147,6 +147,7 @@ enum BuildState {
 pub struct BitbucketCredentials {
     pub username: String,
     pub password: String,
+    /// Base URL for Bitbucket
     pub base_url: String,
     pub project_slug: String,
     pub repo_slug: String,
@@ -172,7 +173,7 @@ impl ::Repository for Bitbucket {
         let mut headers = rest::Headers::new();
         headers.add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header();
-        let url = format!("{}/api/latest/projects/{}/repos/{}/pull-requests",
+        let url = format!("{}/rest/api/latest/projects/{}/repos/{}/pull-requests",
                           self.credentials.base_url,
                           self.credentials.project_slug,
                           self.credentials.repo_slug);
@@ -298,7 +299,7 @@ impl Bitbucket {
         let mut headers = rest::Headers::new();
         headers.add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header();
-        let url = format!("{}/api/latest/projects/{}/repos/{}/pull-requests/{}/activities?fromType=COMMENT",
+        let url = format!("{}/rest/api/latest/projects/{}/repos/{}/pull-requests/{}/activities?fromType=COMMENT",
                           self.credentials.base_url,
                           self.credentials.project_slug,
                           self.credentials.repo_slug,
@@ -324,7 +325,7 @@ impl Bitbucket {
             .add_content_type_json_header();
 
         let body = json::encode(&CommentSubmit { text: text.to_owned() }).unwrap();
-        let url = format!("{}/api/latest/projects/{}/repos/{}/pull-requests/{}/comments",
+        let url = format!("{}/rest/api/latest/projects/{}/repos/{}/pull-requests/{}/comments",
                           self.credentials.base_url,
                           self.credentials.project_slug,
                           self.credentials.repo_slug,
@@ -371,7 +372,7 @@ impl Bitbucket {
             .add_content_type_json_header();
 
         let body = json::encode(&bitbucket_build).unwrap();
-        let url = format!("{}/build-status/1.0/commits/{}",
+        let url = format!("{}/rest/build-status/1.0/commits/{}",
                           self.credentials.base_url,
                           pr.from_commit);
 

@@ -8,7 +8,7 @@
   "bitbucket": {
     "username": "username",
     "password": "password",
-    "base_url": "https://www.example.com/bb/rest/api/latest",
+    "base_url": "https://www.example.com/bb",
     "project_slug": "foo",
     "repo_slug": "bar"
   },

@@ -601,7 +601,7 @@ mod tests {
             bitbucket: bitbucket::BitbucketCredentials {
                 username: "username".to_string(),
                 password: "password".to_string(),
-                base_url: "https://www.example.com/bb/rest/api/latest".to_string(),
+                base_url: "https://www.example.com/bb".to_string(),
                 project_slug: "foo".to_string(),
                 repo_slug: "bar".to_string(),
             },
