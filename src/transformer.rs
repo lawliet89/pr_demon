@@ -111,19 +111,8 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
         let target_oid = map_err!(git2::Oid::from_str(&pr.to_commit))?;
         let reference = &pr.from_ref;
         let target_ref = &pr.to_ref;
-        let merge = map_err!(merger.check_and_merge(oid, target_oid, reference, target_ref))?;
-
-        if self.config.push != Some(false) {
-            let mut remote = map_err!(self.repo.remote(None))?;
-            let notes_reference = merger.notes_reference();
-            let refspecs: Vec<String> = [&merge.merge_reference, &notes_reference]
-                .iter()
-                .map(|s| format!("+{}", s))
-                .collect();
-            let refspecs_slice: Vec<&str> = refspecs.iter().map(|s| &**s).collect();
-            info!("Pushing to {:?}", refspecs);
-            map_err!(remote.push(&refspecs_slice))?;
-        }
+        let push = self.config.push != Some(false);
+        let merge = map_err!(merger.check_and_merge(oid, target_oid, reference, target_ref, push))?;
 
         let mut transformed_pr = pr.clone();
         transformed_pr.from_ref = merge.merge_reference.to_string();
@@ -353,7 +342,7 @@ mod tests {
 
         let transformer = not_err!(transformer::Fusionner::new(&transformer_config));
         let mut merger = not_err!(transformer::Fusionner::make_merger(&transformer.repo, None, Some(&pr)));
-        let merge = not_err!(merger.check_and_merge(branch_oid, oid, reference, target_reference));
+        let merge = not_err!(merger.check_and_merge(branch_oid, oid, reference, target_reference, false));
 
         let transformed_pr = not_err!(transformer.pre_build_retrieval(pr));
 
@@ -381,7 +370,7 @@ mod tests {
 
         let transformer = not_err!(transformer::Fusionner::new(&transformer_config));
         let mut merger = not_err!(transformer::Fusionner::make_merger(&transformer.repo, None, Some(&pr)));
-        let _merge = not_err!(merger.check_and_merge(branch_oid, oid, reference, target_reference));
+        let _merge = not_err!(merger.check_and_merge(branch_oid, oid, reference, target_reference, false));
 
         let transformed_pr = not_err!(transformer.pre_build_retrieval(pr));
 
