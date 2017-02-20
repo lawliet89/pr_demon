@@ -260,15 +260,10 @@ impl Bitbucket {
                                       build: &::BuildDetails,
                                       state: &BuildState)
                                       -> Result<Comment, String> {
-
-        let status_text = build.status_text
-            .as_ref()
-            .map_or_else(|| "".to_string(), |s| s.to_string());
-
         let text = match *state {
-            BuildState::INPROGRESS => make_queued_comment(&build.web_url, &pr.from_commit),
-            BuildState::FAILED => make_failure_comment(&build.web_url, &pr.from_commit, &status_text),
-            BuildState::SUCCESSFUL => make_success_comment(&build.web_url, &pr.from_commit, &status_text),
+            BuildState::INPROGRESS => make_queued_comment(build, pr, &self.credentials),
+            BuildState::FAILED => make_failure_comment(build, pr, &self.credentials),
+            BuildState::SUCCESSFUL => make_success_comment(build, pr, &self.credentials),
         };
 
         let mut event_payload = json_dictionary::JsonDictionary::new();
@@ -413,20 +408,81 @@ impl Bitbucket {
     }
 }
 
-fn make_queued_comment(build_url: &str, commit_id: &str) -> String {
-    format!("⏳ [Build]({}) for commit {} queued", build_url, commit_id)
+fn browse_url(base: &str, project_slug: &str, repo_slug: &str, reference: &str) -> String {
+    format!("{}/projects/{}/repos/{}/browse?at={}",
+            base,
+            project_slug,
+            repo_slug,
+            reference)
 }
 
-fn make_success_comment(build_url: &str, commit_id: &str, build_message: &str) -> String {
-    format!("✔️ [Build]({}) for commit {} is **successful**: {}",
-            build_url,
-            commit_id,
-            build_message)
+fn commit_url(base: &str, project_slug: &str, repo_slug: &str, commit: &str) -> String {
+    format!("{}/projects/{}/repos/{}/commits/{}",
+            base,
+            project_slug,
+            repo_slug,
+            commit)
 }
 
-fn make_failure_comment(build_url: &str, commit_id: &str, build_message: &str) -> String {
-    format!("❌ [Build]({}) for commit {} has **failed**: {}",
-            build_url,
-            commit_id,
-            build_message)
+fn make_queued_comment(build: &::BuildDetails, pr: &::PullRequest, config: &BitbucketCredentials) -> String {
+    let reference_url = browse_url(&config.base_url,
+                                   &config.project_slug,
+                                   &config.repo_slug,
+                                   &pr.from_ref);
+    let commit_url = commit_url(&config.base_url,
+                                &config.project_slug,
+                                &config.repo_slug,
+                                &pr.from_commit);
+    format!("⏳ [Build]({build_url}) for [{reference}]({reference_url}) ([{commit}]({commit_url})) queued",
+            build_url = build.web_url,
+            reference = pr.from_ref,
+            reference_url = reference_url,
+            commit = pr.from_commit,
+            commit_url = commit_url)
+}
+
+fn make_success_comment(build: &::BuildDetails, pr: &::PullRequest, config: &BitbucketCredentials) -> String {
+    let reference_url = browse_url(&config.base_url,
+                                   &config.project_slug,
+                                   &config.repo_slug,
+                                   &pr.from_ref);
+    let commit_url = commit_url(&config.base_url,
+                                &config.project_slug,
+                                &config.repo_slug,
+                                &pr.from_commit);
+    let status_text = build.status_text
+        .as_ref()
+        .map_or_else(|| "".to_string(), |s| s.to_string());
+
+    format!("✔️ [Build]({build_url}) for [{reference}]({reference_url}) ([{commit}]({commit_url}))
+                is **successful**: {build_message}",
+            build_url = build.web_url,
+            reference = pr.from_ref,
+            reference_url = reference_url,
+            commit = pr.from_commit,
+            commit_url = commit_url,
+            build_message = status_text)
+}
+
+fn make_failure_comment(build: &::BuildDetails, pr: &::PullRequest, config: &BitbucketCredentials) -> String {
+    let reference_url = browse_url(&config.base_url,
+                                   &config.project_slug,
+                                   &config.repo_slug,
+                                   &pr.from_ref);
+    let commit_url = commit_url(&config.base_url,
+                                &config.project_slug,
+                                &config.repo_slug,
+                                &pr.from_commit);
+    let status_text = build.status_text
+        .as_ref()
+        .map_or_else(|| "".to_string(), |s| s.to_string());
+
+    format!("❌ [Build]({build_url}) for [{reference}]({reference_url}) ([{commit}]({commit_url}))
+                has **failed**: {build_message}",
+            build_url = build.web_url,
+            reference = pr.from_ref,
+            reference_url = reference_url,
+            commit = pr.from_commit,
+            commit_url = commit_url,
+            build_message = status_text)
 }
