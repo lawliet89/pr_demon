@@ -455,7 +455,7 @@ fn make_success_comment(build: &::BuildDetails, pr: &::PullRequest, config: &Bit
         .as_ref()
         .map_or_else(|| "".to_string(), |s| s.to_string());
 
-    format!("✔️ [Build]({build_url}) for [{reference}]({reference_url}) ([{commit}]({commit_url}))
+    format!("✔️ [Build]({build_url}) for [{reference}]({reference_url}) ([{commit}]({commit_url})) \
                 is **successful**: {build_message}",
             build_url = build.web_url,
             reference = pr.from_ref,
@@ -478,7 +478,7 @@ fn make_failure_comment(build: &::BuildDetails, pr: &::PullRequest, config: &Bit
         .as_ref()
         .map_or_else(|| "".to_string(), |s| s.to_string());
 
-    format!("❌ [Build]({build_url}) for [{reference}]({reference_url}) ([{commit}]({commit_url}))
+    format!("❌ [Build]({build_url}) for [{reference}]({reference_url}) ([{commit}]({commit_url})) \
                 has **failed**: {build_message}",
             build_url = build.web_url,
             reference = pr.from_ref,
