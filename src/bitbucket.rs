@@ -402,7 +402,7 @@ impl Bitbucket {
         Build {
             state: build_status.to_owned(),
             key: build.build_id.to_owned(),
-            name: format!("{} - {}", build.build_id, build.branch_name),
+            name: format!("{} — {}", build.build_id, build.branch_name),
             url: build.web_url.to_owned(),
             description: description.to_owned(),
         }
