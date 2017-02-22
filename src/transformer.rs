@@ -405,7 +405,7 @@ mod tests {
     }
 
     #[test]
-    /// Ttests that `prepare` (and subsequently `merge`) and `pre_build_retrieval` work in concert
+    /// Tests that `prepare` (and subsequently `merge`) and `pre_build_retrieval` work in concert
     fn fusionner_merging_smoke_test() {
         let (td, _raw) = raw_repo_init();
         let config = config_init(&td);
