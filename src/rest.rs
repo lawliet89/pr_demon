@@ -2,7 +2,7 @@ use std::io::Read;
 use rustc_serialize::{json, Decodable};
 use reqwest;
 use reqwest::{Client, Method, Error, Response, StatusCode};
-use reqwest::header::{Authorization, Basic, Accept, qitem, ContentType};
+use reqwest::header::{Authorization, Basic, Accept, qitem, ContentType, UserAgent};
 use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 
 
@@ -12,7 +12,9 @@ pub struct Headers {
 
 impl Headers {
     pub fn new() -> Headers {
-        Headers { headers: reqwest::header::Headers::new() }
+        let mut headers = Headers { headers: reqwest::header::Headers::new() };
+        headers.add_pr_demon_user_agent();
+        headers
     }
 
     pub fn add_authorization_header(&mut self, credentials: &::UsernameAndPassword) -> &mut Headers {
@@ -41,6 +43,11 @@ impl Headers {
         self.headers.set(ContentType(Mime(TopLevel::Application,
                                           SubLevel::Xml,
                                           vec![(Attr::Charset, Value::Utf8)])));
+        self
+    }
+
+    pub fn add_pr_demon_user_agent(&mut self) -> &mut Headers {
+        self.headers.set(UserAgent("pr_demon/0.1.0".to_string()));
         self
     }
 }
