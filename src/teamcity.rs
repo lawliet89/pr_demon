@@ -275,7 +275,7 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
         Ok(build.to_build_details())
     }
 
-    fn refresh_vcs(&self, _pr: &::PullRequest) -> Result<(), String> {
+    fn refresh_vcs(&self) -> Result<(), String> {
         let mut headers = rest::Headers::new();
         headers.add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header();

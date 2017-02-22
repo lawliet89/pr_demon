@@ -136,13 +136,13 @@ pub trait ContinuousIntegrator {
     fn get_build_list(&self, pr: &PullRequest) -> Result<Vec<Build>, String>;
     fn get_build(&self, build_id: i32) -> Result<BuildDetails, String>;
     fn queue_build(&self, pr: &PullRequest) -> Result<BuildDetails, String>;
-    fn refresh_vcs(&self, _pr: &PullRequest) -> Result<(), String> {
+    fn refresh_vcs(&self) -> Result<(), String> {
         Ok(())
     }
 }
 
 pub trait PrTransformer {
-    fn prepare(&self, _prs: &Vec<PullRequest>, _repo: &Repository, _ci: &ContinuousIntegrator) -> Result<(), String> {
+    fn prepare(&self, _prs: &[PullRequest], _repo: &Repository, _ci: &ContinuousIntegrator) -> Result<(), String> {
         Ok(())
     }
 
@@ -180,7 +180,7 @@ pub trait PrTransformer {
         Ok(pr)
     }
 
-    fn finalize(&self, _prs: &Vec<PullRequest>, _repo: &Repository, _ci: &ContinuousIntegrator) -> Result<(), String> {
+    fn finalize(&self, _prs: &[PullRequest], _repo: &Repository, _ci: &ContinuousIntegrator) -> Result<(), String> {
         Ok(())
     }
 }
