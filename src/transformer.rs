@@ -76,7 +76,9 @@ impl<'repo> Fusionner<'repo> {
 }
 
 impl<'repo> Fusionner<'repo> {
-    fn merge(&self, pr: &::PullRequest) -> Result<fusionner::merger::Merge, String> {
+    fn merge(&self,
+             pr: &::PullRequest)
+             -> Result<(fusionner::merger::Merge, fusionner::merger::ShouldMergeResult), String> {
         let mut merger = map_err!(Self::make_merger(&self.repo,
                                                     to_option_str(&self.config.notes_namespace),
                                                     Some(&pr)))?;
@@ -93,7 +95,6 @@ impl<'repo> Fusionner<'repo> {
 impl<'repo> ::PrTransformer for Fusionner<'repo> {
     /// Merge all the PRs and inform the CI
     fn prepare(&self, prs: &[::PullRequest], _repo: &::Repository, ci: &::ContinuousIntegrator) -> Result<(), String> {
-
         let notes_refspec;
         let mut remote = map_err!(self.repo.remote(None))?;
 
@@ -101,16 +102,18 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
             let merger = map_err!(Self::make_merger(&self.repo,
                                                     to_option_str(&self.config.notes_namespace),
                                                     None))?;
-            notes_refspec = merger.notes_refspec();
+            notes_refspec = format!("{0}:{0}", merger.notes_reference());
             let mut references = HashSet::<String>::new();
 
             info!("Gathering references and commits from PRs to fetch from remote");
             for pr in prs {
-                references.insert(format!("+{}", pr.from_ref));
-                references.insert(format!("+{}", pr.to_ref));
+                references.insert(pr.from_ref.to_string());
+                references.insert(pr.to_ref.to_string());
             }
 
-            references.insert(format!("+{}", notes_refspec));
+            references.insert(notes_refspec.to_string());
+
+            let references: Vec<String> = references.iter().map(|s| fusionner::git::RefspecStr::to_forced(s)).collect();
             info!("Fetching references");
             debug!("{:?}", references);
             let references_slice: Vec<&str> = references.iter().map(|s| &**s).collect();
@@ -123,19 +126,25 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
             info!("PR #{}", pr.id);
             match self.merge(pr) {
                 Err(e) => error!("Error merging PR: {}", e),
-                Ok(merge) => {
-                    references.insert(format!("+{}", merge.merge_reference));
+                Ok((merge, should_merge)) => {
+                    if let fusionner::merger::ShouldMergeResult::Merge(_) = should_merge {
+                        references.insert(merge.merge_reference.to_string());
+                    }
                 }
             };
 
         }
 
         if self.config.push != Some(false) {
-            references.insert(format!("+{}", notes_refspec));
+            references.insert(notes_refspec.to_string());
+            let references: Vec<String> = references.iter().map(|s| fusionner::git::RefspecStr::to_forced(s)).collect();
             let references_slice: Vec<&str> = references.iter().map(|s| &**s).collect();
+            info!("Pushing to remote");
+            debug!("{:?}", references);
             map_err!(remote.push(&references_slice))?;
         }
 
+        info!("Requesting CI to refresh VCS");
         ci.refresh_vcs()?;
         Ok(())
     }
@@ -194,7 +203,7 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
 
         // FIXME: There is no good way to get back the original PR reference. How should we do this?
 
-        info!("PR Commit: {}", transformed_pr.from_commit);
+        info!("Original PR Commit: {}", transformed_pr.from_commit);
         debug!("Transformed PR {:?} reversed to {:?}", pr, transformed_pr);
         Ok(transformed_pr)
     }
@@ -453,7 +462,7 @@ mod tests {
         };
 
         let transformer = not_err!(transformer::Fusionner::new(&transformer_config));
-        let merge = not_err!(transformer.merge(&pr));
+        let (merge, _should_merge) = not_err!(transformer.merge(&pr));
 
         assert_eq!("refs/pull/1/merge", merge.merge_reference);
         assert!(merge.merge_oid != format!("{}", branch_oid));
@@ -479,9 +488,10 @@ mod tests {
 
         let transformer = not_err!(transformer::Fusionner::new(&transformer_config));
         let mut merger = not_err!(transformer::Fusionner::make_merger(&transformer.repo, None, Some(&pr)));
-        let merge = not_err!(merger.check_and_merge(branch_oid, oid, reference, target_reference, false));
+        let (merge, _should_merge) =
+            not_err!(merger.check_and_merge(branch_oid, oid, reference, target_reference, false));
 
-        let actual_merge = not_err!(transformer.merge(&pr));
+        let (actual_merge, _should_merge) = not_err!(transformer.merge(&pr));
         assert_eq!(merge.merge_oid, actual_merge.merge_oid);
         assert_eq!(merge.merge_reference, actual_merge.merge_reference);
 

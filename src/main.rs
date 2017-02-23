@@ -238,7 +238,6 @@ fn main() {
                 info!("{}{} Open Pull Requests Found", prefix(0), prs.len());
                 if let Err(err) = pr_transformer.prepare(&prs, &bitbucket, &config.teamcity) {
                     error!("{}Error preparing PR Transformer: {}", prefix(0), err);
-                    continue;
                 }
 
                 for pr in &prs {
