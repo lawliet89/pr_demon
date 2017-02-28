@@ -22,7 +22,9 @@
     "repository": {
       "uri": "https://www.example.com/stash/scm/eg/foobar.git",
       "username": "username",
-      "password": "password",
+      "password": {
+        "password": "password"
+      },
       "checkout_path": "target/test_repo",
       "fetch_refspecs": [],
       "push_refspecs": [],

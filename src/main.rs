@@ -474,8 +474,10 @@ mod tests {
     use super::{BuildDetails, BuildStatus, BuildState, Repository, User};
     use super::{read_config, parse_config, get_latest_build, schedule_build};
     use super::check_build_status;
+
     use std::fs::File;
     use std::io::{Read, Cursor};
+    use fusionner;
 
     struct StubBuild {
         build_list: Result<Vec<Build>, String>,
@@ -642,7 +644,7 @@ mod tests {
                 repository: ::fusionner::RepositoryConfiguration {
                     uri: "https://www.example.com/stash/scm/eg/foobar.git".to_string(),
                     username: Some("username".to_string()),
-                    password: Some("password".to_string()),
+                    password: Some(fusionner::Password::new("password")),
                     key: None,
                     key_passphrase: None,
                     checkout_path: "target/test_repo".to_string(),
