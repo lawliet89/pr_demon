@@ -42,8 +42,8 @@ pub enum BuildState {
 }
 
 impl BuildState {
-    fn to_build_state(self) -> ::BuildState {
-        match self {
+    fn to_build_state(&self) -> ::BuildState {
+        match *self {
             BuildState::queued => ::BuildState::Queued,
             BuildState::finished => ::BuildState::Finished,
             BuildState::running => ::BuildState::Running,
@@ -60,8 +60,8 @@ pub enum BuildStatus {
 }
 
 impl BuildStatus {
-    fn to_build_status(self) -> ::BuildStatus {
-        match self {
+    fn to_build_status(&self) -> ::BuildStatus {
+        match *self {
             BuildStatus::SUCCESS => ::BuildStatus::Success,
             BuildStatus::FAILURE => ::BuildStatus::Failure,
             BuildStatus::UNKNOWN => ::BuildStatus::Unknown,
@@ -235,7 +235,7 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
             None => vec![],
             Some(ref builds) => {
                 builds.iter()
-                    .map(|ref build| ::Build { id: build.id })
+                    .map(|build| ::Build { id: build.id })
                     .collect()
             }
         })
@@ -288,7 +288,7 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
             rest::post_raw(&url, "", headers.headers).map_err(|err| format!("Error requesting for VCS fetch {}", err))?;
         match response.status() {
             status if status == &hyper::status::StatusCode::Ok => Ok(()),
-            e @ _ => Err(e.to_string()),
+            e => Err(e.to_string()),
         }
     }
 }

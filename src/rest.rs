@@ -111,7 +111,7 @@ fn request<T>(url: &str,
     let mut response = request_raw(url, method, body, headers).map_err(|err| err.to_string())?;
     match response.status() {
         status if status == status_code => (),
-        e @ _ => return Err(e.to_string()),
+        e => return Err(e.to_string()),
     };
 
     let mut json_string = String::new();

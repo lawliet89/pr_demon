@@ -59,7 +59,7 @@ impl<T> Fanout<T>
                 let mut subscribers = subscribers_mutex.unwrap();
                 let mut stale_subscribers_indices = Vec::<usize>::new();
                 for (index, subscriber_tx) in subscribers.iter().enumerate() {
-                    if let Err(_) = subscriber_tx.send(message.clone()) {
+                    if subscriber_tx.send(message.clone()).is_err() {
                         stale_subscribers_indices.push(index);
                     }
                 }

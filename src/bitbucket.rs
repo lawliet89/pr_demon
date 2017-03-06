@@ -182,7 +182,7 @@ impl ::Repository for Bitbucket {
             .map_err(|err| format!("Error getting list of Pull Requests {}", err))?;
         Ok(prs.values
             .iter()
-            .map(|ref pr| {
+            .map(|pr| {
                 ::PullRequest {
                     id: pr.id,
                     web_url: pr.links["self"][0].href.to_string(),
@@ -201,23 +201,23 @@ impl ::Repository for Bitbucket {
     }
 
     fn build_queued(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
-        self.update_pr_build_status_comment(&pr, &build, &BuildState::INPROGRESS)
+        self.update_pr_build_status_comment(pr, build, &BuildState::INPROGRESS)
             .map_err(|err| format!("Error submitting comment: {}", err))?;
         Ok(())
     }
 
     fn build_running(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
-        self.build_queued(&pr, &build)
+        self.build_queued(pr, build)
     }
 
     fn build_success(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
-        self.update_pr_build_status_comment(&pr, &build, &BuildState::SUCCESSFUL)
+        self.update_pr_build_status_comment(pr, build, &BuildState::SUCCESSFUL)
             .map_err(|err| format!("Error submitting comment: {}", err))?;
         Ok(())
     }
 
     fn build_failure(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
-        self.update_pr_build_status_comment(&pr, &build, &BuildState::FAILED)
+        self.update_pr_build_status_comment(pr, build, &BuildState::FAILED)
             .map_err(|err| format!("Error submitting comment: {}", err))?;
         Ok(())
     }
@@ -244,16 +244,16 @@ impl Bitbucket {
         self.broadcaster.broadcast(&message);
     }
 
-    fn matching_comments(comments: &Vec<Comment>, text: &str) -> Option<Comment> {
+    fn matching_comments(comments: &[Comment], text: &str) -> Option<Comment> {
         comments.iter()
             .find(|&comment| comment.text == text)
-            .map(|comment| comment.clone())
+            .cloned()
     }
 
-    fn matching_comments_substring(comments: &Vec<Comment>, substr: &str) -> Option<Comment> {
+    fn matching_comments_substring(comments: &[Comment], substr: &str) -> Option<Comment> {
         comments.iter()
             .find(|&comment| comment.text.as_str().contains(substr))
-            .map(|comment| comment.clone())
+            .cloned()
     }
 
     fn update_pr_build_status_comment(&self,
@@ -273,11 +273,11 @@ impl Bitbucket {
 
         let (comment, opcode) = match self.get_comments(pr.id) {
             Ok(ref comments) => {
-                match Bitbucket::matching_comments(&comments, &text) {
+                match Bitbucket::matching_comments(comments, &text) {
                     Some(comment) => (Ok(comment), "Existing"),
                     None => {
                         // Have to post or edit comment
-                        match Bitbucket::matching_comments_substring(&comments, &pr.from_commit) {
+                        match Bitbucket::matching_comments_substring(comments, &pr.from_commit) {
                             Some(comment) => (self.edit_comment(pr.id, &comment, &text), "Update"),
                             None => (self.post_comment(pr.id, &text), "Post"),
                         }
@@ -311,7 +311,7 @@ impl Bitbucket {
         Ok(activities.values
             .iter()
             .filter(|&activity| activity.comment.is_some() && activity.user.name == self.credentials.username)
-            .map(|ref activity| {
+            .map(|activity| {
                 // won't panic because of filter above
                 activity.comment.as_ref().unwrap().to_owned()
             })
@@ -364,7 +364,7 @@ impl Bitbucket {
     }
 
     fn post_build_status(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<Build, String> {
-        let bitbucket_build = Bitbucket::make_build(&build);
+        let bitbucket_build = Bitbucket::make_build(build);
 
         let mut headers = rest::Headers::new();
         headers.add_authorization_header(self as &::UsernameAndPassword)
@@ -380,7 +380,7 @@ impl Bitbucket {
             rest::post_raw(&url, &body, headers.headers).map_err(|err| format!("Error posting build {}", err))?;
         match response.status() {
             status if status == &hyper::status::StatusCode::NoContent => Ok(bitbucket_build),
-            e @ _ => Err(e.to_string()),
+            e => Err(e.to_string()),
         }
     }
 

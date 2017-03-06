@@ -278,7 +278,7 @@ fn read_config<R>(path: &str, reader: R) -> Result<String, String>
 {
     let mut file: Box<std::io::Read> = match path {
         "-" => Box::new(reader),
-        path @ _ => Box::new(File::open(path).map_err(|e| format!("Unable to read file because: {}", e))?),
+        path => Box::new(File::open(path).map_err(|e| format!("Unable to read file because: {}", e))?),
     };
 
     let mut json = String::new();
@@ -287,7 +287,7 @@ fn read_config<R>(path: &str, reader: R) -> Result<String, String>
 }
 
 fn parse_config(json: &str) -> Result<Config, String> {
-    json::decode(&json).map_err(|err| format!("Unable to decode JSON value {}", err))
+    json::decode(json).map_err(|err| format!("Unable to decode JSON value {}", err))
 }
 
 fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<BuildDetails> {
@@ -297,7 +297,7 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
     info!("{}Commit: {}", prefix(2), pr_commit);
     info!("{}Finding latest build for commit", prefix(2));
 
-    let latest_build = match ci.get_build_list(&pr) {
+    let latest_build = match ci.get_build_list(pr) {
         Ok(ref build_list) => {
             if build_list.is_empty() {
                 info!("{}Build does not exist — running build", prefix(2));
@@ -405,7 +405,7 @@ fn schedule_build(pr: &PullRequest, ci: &ContinuousIntegrator, repo: &Repository
         }
         Ok(queued) => {
             info!("{}Build Queued: {}", prefix(2), queued.web_url);
-            repo.build_queued(&pr, &queued).and(Ok(queued))
+            repo.build_queued(pr, &queued).and(Ok(queued))
         }
     }
 }
@@ -419,13 +419,13 @@ fn check_build_status(pr: &PullRequest,
         BuildState::Finished => {
             match build.status {
                 BuildStatus::Success => {
-                    repo.build_success(&pr, &build).and(Ok((BuildState::Finished, BuildStatus::Success)))
+                    repo.build_success(pr, build).and(Ok((BuildState::Finished, BuildStatus::Success)))
                 }
-                ref status @ _ => repo.build_failure(&pr, &build).and(Ok((BuildState::Finished, status.to_owned()))),
+                ref status => repo.build_failure(pr, build).and(Ok((BuildState::Finished, status.to_owned()))),
             }
         }
-        BuildState::Running => repo.build_running(&pr, &build).and(Ok((BuildState::Running, build.status.to_owned()))),
-        BuildState::Queued => repo.build_queued(&pr, &build).and(Ok((BuildState::Queued, build.status.to_owned()))),
+        BuildState::Running => repo.build_running(pr, build).and(Ok((BuildState::Running, build.status.to_owned()))),
+        BuildState::Queued => repo.build_queued(pr, build).and(Ok((BuildState::Queued, build.status.to_owned()))),
     }
 }
 
