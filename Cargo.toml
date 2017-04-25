@@ -16,7 +16,7 @@ fusionner = { git = "https://github.com/lawliet89/fusionner", rev = "9adb664cfb2
 git2 = { git = "https://github.com/alexcrichton/git2-rs.git", rev = "0d745cf0efad95a9e407beecd7b508ca9a37df80" }
 hyper = "0.10"
 log = "0.3"
-reqwest = "0.4"
+reqwest = "0.5"
 rustc-serialize = "0.3"
 serde = "1.0.0"
 serde_derive = "1.0.0"
