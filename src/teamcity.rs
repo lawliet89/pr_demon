@@ -15,7 +15,7 @@ macro_rules! build_request_template {
 ")
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 pub struct TeamcityCredentials {
     pub username: String,
     pub password: String,
@@ -33,7 +33,7 @@ impl ::UsernameAndPassword for TeamcityCredentials {
     }
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub enum BuildState {
     queued,
@@ -51,7 +51,7 @@ impl BuildState {
     }
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub enum BuildStatus {
     SUCCESS,
@@ -69,14 +69,14 @@ impl BuildStatus {
     }
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 pub struct BuildList {
     pub count: i32,
     pub href: String,
     pub build: Option<Vec<BuildListItem>>,
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
 pub struct BuildListItem {
     pub id: i32,
@@ -91,7 +91,7 @@ pub struct BuildListItem {
     pub webUrl: String,
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
 pub struct Build {
     pub id: i32,
@@ -143,7 +143,7 @@ impl Build {
     }
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
 pub struct BuildType {
     pub id: String,
@@ -154,14 +154,14 @@ pub struct BuildType {
     pub webUrl: String,
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
 pub struct LastChanges {
     pub count: i32,
     pub change: Vec<Change>,
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
 pub struct Change {
     pub id: i32,
@@ -172,30 +172,30 @@ pub struct Change {
     pub webUrl: String,
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 pub struct Href {
     pub href: String,
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 pub struct Revisions {
     pub count: i32,
     pub revision: Option<Vec<Revision>>,
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 pub struct Revision {
     pub version: String,
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
 pub struct Agent {
     pub name: String,
     pub typeId: i32,
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 pub struct TestOccurences {
     pub count: i32,
     pub href: String,
@@ -204,13 +204,13 @@ pub struct TestOccurences {
     pub default: bool,
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 pub struct Properties {
     pub count: i32,
     pub property: Vec<Property>,
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 pub struct Property {
     pub name: String,
     pub value: String,

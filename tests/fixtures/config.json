@@ -13,10 +13,7 @@
     "repo_slug": "bar"
   },
   "run_interval": {
-    "variant": "Fixed",
-    "fields": [
-      999
-    ]
+    "interval": 999
   },
   "fusionner": {
     "repository": {

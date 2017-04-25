@@ -1,3 +1,8 @@
+#[macro_use]
+extern crate log;
+#[macro_use]
+extern crate serde_derive;
+
 extern crate chrono;
 extern crate cron;
 extern crate docopt;
@@ -5,17 +10,16 @@ extern crate fern;
 extern crate fusionner;
 extern crate git2;
 extern crate hyper;
-#[macro_use]
-extern crate log;
 extern crate reqwest;
 extern crate rustc_serialize;
+extern crate serde;
+extern crate serde_json;
 extern crate time;
 extern crate url;
 
 mod bitbucket;
 mod fanout;
 mod transformer;
-mod json_dictionary;
 mod rest;
 mod teamcity;
 
@@ -28,7 +32,6 @@ use std::thread;
 use chrono::*;
 use cron::CronSchedule;
 use docopt::Docopt;
-use rustc_serialize::json;
 
 use fanout::{Fanout, Message, OpCode};
 
@@ -52,7 +55,7 @@ struct Args {
     flag_log_level: Option<String>,
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 struct Config {
     // TODO: Rename fields
     teamcity: teamcity::TeamcityCredentials,
@@ -63,7 +66,8 @@ struct Config {
     post_build: bool,
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
+#[serde(untagged)]
 enum Interval {
     Cron { expression: String },
     Fixed { interval: u64 },
@@ -74,7 +78,7 @@ pub trait UsernameAndPassword {
     fn password(&self) -> &String;
 }
 
-#[derive(RustcEncodable, RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
 pub struct PullRequest {
     pub id: i32,
     pub web_url: String,
@@ -86,7 +90,7 @@ pub struct PullRequest {
     pub author: User,
 }
 
-#[derive(RustcEncodable, RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
 pub struct User {
     pub name: String,
     pub email: String,
@@ -101,26 +105,26 @@ pub trait Repository {
     fn post_build(&self, pr: &PullRequest, build: &BuildDetails) -> Result<(), String>;
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 pub struct Build {
     pub id: i32,
 }
 
-#[derive(RustcEncodable, RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
 pub enum BuildState {
     Queued,
     Finished,
     Running,
 }
 
-#[derive(RustcEncodable, RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
 pub enum BuildStatus {
     Success,
     Failure,
     Unknown,
 }
 
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 pub struct BuildDetails {
     pub id: i32,
     pub build_id: String,
@@ -294,7 +298,7 @@ fn read_config<R>(path: &str, reader: R) -> Result<String, String>
 }
 
 fn parse_config(json: &str) -> Result<Config, String> {
-    json::decode(json).map_err(|err| format!("Unable to decode JSON value {}", err))
+    serde_json::from_str(json).map_err(|err| format!("Unable to decode JSON value {}", err))
 }
 
 fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<BuildDetails> {

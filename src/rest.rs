@@ -1,10 +1,9 @@
-use std::io::Read;
-use rustc_serialize::{json, Decodable};
+use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 use reqwest;
 use reqwest::{Client, Method, Error, Response, StatusCode};
 use reqwest::header::{Authorization, Basic, Accept, qitem, ContentType, UserAgent};
-use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
-
+use serde::de::DeserializeOwned;
+use serde_json;
 
 pub struct Headers {
     pub headers: reqwest::header::Headers,
@@ -57,13 +56,13 @@ impl Headers {
 }
 
 pub fn get<T>(url: &str, headers: reqwest::header::Headers) -> Result<T, String>
-    where T: Decodable
+    where T: DeserializeOwned
 {
     request(url, reqwest::Method::Get, &None, headers, &StatusCode::Ok)
 }
 
 pub fn post<T>(url: &str, body: &str, headers: reqwest::header::Headers, status_code: &StatusCode) -> Result<T, String>
-    where T: Decodable
+    where T: DeserializeOwned
 {
     request(url,
             reqwest::Method::Post,
@@ -77,7 +76,7 @@ pub fn post_raw(url: &str, body: &str, headers: reqwest::header::Headers) -> Res
 }
 
 pub fn put<T>(url: &str, body: &str, headers: reqwest::header::Headers, status_code: &StatusCode) -> Result<T, String>
-    where T: Decodable
+    where T: DeserializeOwned
 {
     request(url,
             reqwest::Method::Put,
@@ -110,19 +109,14 @@ fn request<T>(url: &str,
               headers: reqwest::header::Headers,
               status_code: &StatusCode)
               -> Result<T, String>
-    where T: Decodable
+    where T: DeserializeOwned
 {
-    let mut response = request_raw(url, method, body, headers)
+    let response = request_raw(url, method, body, headers)
         .map_err(|err| err.to_string())?;
     match response.status() {
         status if status == status_code => (),
         e => return Err(e.to_string()),
     };
 
-    let mut json_string = String::new();
-    response
-        .read_to_string(&mut json_string)
-        .map_err(|err| err.to_string())?;
-
-    json::decode(&json_string).map_err(|err| format!("Error parsing response: {} {}", json_string, err))
+    serde_json::from_reader(response).map_err(|err| format!("Error parsing response: {}", err))
 }

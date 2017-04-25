@@ -2,9 +2,11 @@ use std::sync::mpsc::{channel, Sender, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread::spawn;
 use std::marker::Send;
-use rustc_serialize::{json, Encodable};
 
-#[derive(RustcDecodable, RustcEncodable, PartialEq, Debug, Clone)]
+use serde::Serialize;
+use serde_json;
+
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub enum OpCode {
     OpenPullRequest,
     BuildFound,
@@ -16,7 +18,7 @@ pub enum OpCode {
     Custom { payload: String },
 }
 
-#[derive(RustcDecodable, RustcEncodable, PartialEq, Debug, Clone)]
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct Message {
     pub opcode: OpCode,
     pub payload: String,
@@ -24,9 +26,10 @@ pub struct Message {
 
 impl Message {
     pub fn new<T>(opcode: OpCode, payload: &T) -> Message
-        where T: Encodable
+        where T: Serialize
     {
-        let encoded = json::encode(payload).unwrap();
+        // FIXME: Remove unwrap()
+        let encoded = serde_json::to_string(payload).unwrap();
         Message {
             opcode: opcode,
             payload: encoded,

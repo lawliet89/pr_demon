@@ -3,13 +3,14 @@ use std::vec::Vec;
 use std::option::Option;
 
 use hyper;
-use rustc_serialize::{json, Encodable};
+use serde::Serialize;
+use serde_json;
+use serde_json::map::Map;
 
 use fanout;
-use json_dictionary;
 use rest;
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
 struct PagedApi<T> {
     size: i32,
@@ -19,7 +20,7 @@ struct PagedApi<T> {
     start: i32,
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
 struct PullRequest {
     id: i32,
@@ -40,7 +41,7 @@ struct PullRequest {
     links: BTreeMap<String, Vec<Link>>,
 }
 
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
 struct Comment {
     id: i32,
@@ -51,18 +52,18 @@ struct Comment {
     updatedDate: i64,
 }
 
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 struct CommentSubmit {
     text: String,
 }
 
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 struct CommentEdit {
     text: String,
     version: i32,
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
 struct GitReference {
     id: String,
@@ -71,7 +72,7 @@ struct GitReference {
     latestCommit: String,
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 struct Repository {
     slug: String,
     name: Option<String>,
@@ -80,7 +81,7 @@ struct Repository {
     links: BTreeMap<String, Vec<Link>>,
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 struct Project {
     key: String,
     id: i32,
@@ -90,14 +91,14 @@ struct Project {
     links: BTreeMap<String, Vec<Link>>,
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 struct PullRequestParticipant {
     user: User,
     role: String,
     approved: bool,
 }
 
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
 struct User {
     name: String,
@@ -109,13 +110,13 @@ struct User {
     links: BTreeMap<String, Vec<Link>>, // type: String
 }
 
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 struct Link {
     href: String,
     name: Option<String>,
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 #[allow(non_snake_case)]
 struct Activity {
     id: i32,
@@ -126,7 +127,7 @@ struct Activity {
     comment: Option<Comment>,
 }
 
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 struct Build {
     state: BuildState,
     key: String,
@@ -135,7 +136,7 @@ struct Build {
     description: String,
 }
 
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 #[allow(non_camel_case_types)]
 enum BuildState {
     INPROGRESS,
@@ -143,7 +144,7 @@ enum BuildState {
     SUCCESSFUL,
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 pub struct BitbucketCredentials {
     pub username: String,
     pub password: String,
@@ -238,7 +239,7 @@ impl Bitbucket {
     }
 
     fn broadcast<T>(&self, opcode: &str, payload: &T)
-        where T: Encodable
+        where T: Serialize
     {
         let opcode = fanout::OpCode::Custom { payload: format!("Bitbucket::{}", opcode).to_owned() };
         let message = fanout::Message::new(opcode, payload);
@@ -270,13 +271,11 @@ impl Bitbucket {
             BuildState::SUCCESSFUL => make_success_comment(build, pr, &self.credentials),
         };
 
-        let mut event_payload = json_dictionary::JsonDictionary::new();
-        event_payload
-            .insert("pr", &pr)
-            .expect("PR should be RustcEncodable");
-        event_payload
-            .insert("build", &build)
-            .expect("Build should be RustcEncodable");
+        let mut event_payload = Map::new();
+        event_payload.insert("pr".to_string(),
+                             serde_json::to_value(&pr).map_err(|e| e.to_string())?);
+        event_payload.insert("build".to_string(),
+                             serde_json::to_value(&build).map_err(|e| e.to_string())?);
 
         let (comment, opcode) = match self.get_comments(pr.id) {
             Ok(ref comments) => {
@@ -295,9 +294,9 @@ impl Bitbucket {
         };
 
         if let Ok(ref comment) = comment {
-            event_payload
-                .insert("comment", comment)
-                .expect("Comment should be RustcEncodable");
+            event_payload.insert("comment".to_string(),
+                                 serde_json::to_value(&comment)
+                                     .map_err(|e| e.to_string())?);
         }
 
         self.broadcast(&format!("Comment::{}", opcode), &event_payload);
@@ -336,7 +335,8 @@ impl Bitbucket {
             .add_accept_json_header()
             .add_content_type_json_header();
 
-        let body = json::encode(&CommentSubmit { text: text.to_owned() }).unwrap();
+        let body = serde_json::to_string(&CommentSubmit { text: text.to_owned() })
+            .map_err(|e| e.to_string())?;
         let url = format!("{}/rest/api/latest/projects/{}/repos/{}/pull-requests/{}/comments",
                           self.credentials.base_url,
                           self.credentials.project_slug,
@@ -358,11 +358,11 @@ impl Bitbucket {
             .add_accept_json_header()
             .add_content_type_json_header();
 
-        let body = json::encode(&CommentEdit {
-                                     text: text.to_owned(),
-                                     version: comment.version,
-                                 })
-                .unwrap();
+        let body = serde_json::to_string(&CommentEdit {
+                                              text: text.to_owned(),
+                                              version: comment.version,
+                                          })
+                .map_err(|e| e.to_string())?;
         let url = format!("{}/rest/api/latest/projects/{}/repos/{}/pull-requests/{}/comments/{}",
                           self.credentials.base_url,
                           self.credentials.project_slug,
@@ -385,7 +385,8 @@ impl Bitbucket {
             .add_accept_json_header()
             .add_content_type_json_header();
 
-        let body = json::encode(&bitbucket_build).unwrap();
+        let body = serde_json::to_string(&bitbucket_build)
+            .map_err(|e| e.to_string())?;
         let url = format!("{}/rest/build-status/1.0/commits/{}",
                           self.credentials.base_url,
                           pr.from_commit);

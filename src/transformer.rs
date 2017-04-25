@@ -17,7 +17,7 @@ fn to_option_str(opt: &Option<String>) -> Option<&str> {
 pub struct NoOp {}
 impl ::PrTransformer for NoOp {}
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 pub struct FusionnerConfiguration {
     pub notes_namespace: Option<String>,
     pub repository: fusionner::RepositoryConfiguration,
@@ -115,7 +115,7 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
 
             let references: Vec<String> = references
                 .iter()
-                .map(|s| fusionner::git::RefspecStr::to_forced(s))
+                .map(|s| fusionner::git::RefspecStr::as_forced(s))
                 .collect();
             info!("Fetching references");
             debug!("{:?}", references);
@@ -142,7 +142,7 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
             references.insert(notes_refspec.to_string());
             let references: Vec<String> = references
                 .iter()
-                .map(|s| fusionner::git::RefspecStr::to_forced(s))
+                .map(|s| fusionner::git::RefspecStr::as_forced(s))
                 .collect();
             let references_slice: Vec<&str> = references.iter().map(|s| &**s).collect();
             info!("Pushing to remote");
