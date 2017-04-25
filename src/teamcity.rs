@@ -219,7 +219,8 @@ pub struct Property {
 impl ::ContinuousIntegrator for TeamcityCredentials {
     fn get_build_list(&self, pr: &::PullRequest) -> Result<Vec<::Build>, String> {
         let mut headers = rest::Headers::new();
-        headers.add_authorization_header(self as &::UsernameAndPassword)
+        headers
+            .add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header();
 
         let locator = format!("defaultFilter:false,state:any,canceled:false,revision:({})",
@@ -232,29 +233,33 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
         let build_list = rest::get::<BuildList>(&url, headers.headers)
             .map_err(|err| format!("Error getting list of builds {}", err))?;
         Ok(match build_list.build {
-            None => vec![],
-            Some(ref builds) => {
-                builds.iter()
-                    .map(|build| ::Build { id: build.id })
-                    .collect()
-            }
-        })
+               None => vec![],
+               Some(ref builds) => {
+                   builds
+                       .iter()
+                       .map(|build| ::Build { id: build.id })
+                       .collect()
+               }
+           })
     }
 
     fn get_build(&self, build_id: i32) -> Result<::BuildDetails, String> {
         let mut headers = rest::Headers::new();
-        headers.add_authorization_header(self as &::UsernameAndPassword)
+        headers
+            .add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header();
 
         let url = format!("{}/builds/id:{}", self.base_url, build_id);
 
-        let build = rest::get::<Build>(&url, headers.headers).map_err(|err| format!("Error getting build {}", err))?;
+        let build = rest::get::<Build>(&url, headers.headers)
+            .map_err(|err| format!("Error getting build {}", err))?;
         Ok(build.to_build_details())
     }
 
     fn queue_build(&self, pr: &::PullRequest) -> Result<::BuildDetails, String> {
         let mut headers = rest::Headers::new();
-        headers.add_authorization_header(self as &::UsernameAndPassword)
+        headers
+            .add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header()
             .add_content_type_xml_header();
 
@@ -267,25 +272,23 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
                            pr_url = pr.web_url);
         let url = format!("{}/buildQueue", self.base_url);
 
-        let build =
-            rest::post::<Build>(&url,
-                                &body,
-                                headers.headers,
-                                &hyper::status::StatusCode::Ok).map_err(|err| format!("Error queuing build {}", err))?;
+        let build = rest::post::<Build>(&url, &body, headers.headers, &hyper::status::StatusCode::Ok)
+            .map_err(|err| format!("Error queuing build {}", err))?;
         Ok(build.to_build_details())
     }
 
     fn refresh_vcs(&self) -> Result<(), String> {
         let mut headers = rest::Headers::new();
-        headers.add_authorization_header(self as &::UsernameAndPassword)
+        headers
+            .add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header();
 
         let url = format!("{}/vcs-root-instances/checkingForChangesQueue?locator=buildType(id:{})",
                           self.base_url,
                           self.build_id);
 
-        let response =
-            rest::post_raw(&url, "", headers.headers).map_err(|err| format!("Error requesting for VCS fetch {}", err))?;
+        let response = rest::post_raw(&url, "", headers.headers)
+            .map_err(|err| format!("Error requesting for VCS fetch {}", err))?;
         match response.status() {
             status if status == &hyper::status::StatusCode::Ok => Ok(()),
             e => Err(e.to_string()),

@@ -18,31 +18,35 @@ impl Headers {
     }
 
     pub fn add_authorization_header(&mut self, credentials: &::UsernameAndPassword) -> &mut Headers {
-        self.headers.set(Authorization(Basic {
-            username: credentials.username().clone(),
-            password: Some(credentials.password().clone()),
-        }));
+        self.headers
+            .set(Authorization(Basic {
+                                   username: credentials.username().clone(),
+                                   password: Some(credentials.password().clone()),
+                               }));
         self
     }
 
     pub fn add_accept_json_header(&mut self) -> &mut Headers {
-        self.headers.set(Accept(vec![qitem(Mime(TopLevel::Application,
-                                                SubLevel::Json,
-                                                vec![(Attr::Charset, Value::Utf8)]))]));
+        self.headers
+            .set(Accept(vec![qitem(Mime(TopLevel::Application,
+                                        SubLevel::Json,
+                                        vec![(Attr::Charset, Value::Utf8)]))]));
         self
     }
 
     pub fn add_content_type_json_header(&mut self) -> &mut Headers {
-        self.headers.set(ContentType(Mime(TopLevel::Application,
-                                          SubLevel::Json,
-                                          vec![(Attr::Charset, Value::Utf8)])));
+        self.headers
+            .set(ContentType(Mime(TopLevel::Application,
+                                  SubLevel::Json,
+                                  vec![(Attr::Charset, Value::Utf8)])));
         self
     }
 
     pub fn add_content_type_xml_header(&mut self) -> &mut Headers {
-        self.headers.set(ContentType(Mime(TopLevel::Application,
-                                          SubLevel::Xml,
-                                          vec![(Attr::Charset, Value::Utf8)])));
+        self.headers
+            .set(ContentType(Mime(TopLevel::Application,
+                                  SubLevel::Xml,
+                                  vec![(Attr::Charset, Value::Utf8)])));
         self
     }
 
@@ -108,14 +112,17 @@ fn request<T>(url: &str,
               -> Result<T, String>
     where T: Decodable
 {
-    let mut response = request_raw(url, method, body, headers).map_err(|err| err.to_string())?;
+    let mut response = request_raw(url, method, body, headers)
+        .map_err(|err| err.to_string())?;
     match response.status() {
         status if status == status_code => (),
         e => return Err(e.to_string()),
     };
 
     let mut json_string = String::new();
-    response.read_to_string(&mut json_string).map_err(|err| err.to_string())?;
+    response
+        .read_to_string(&mut json_string)
+        .map_err(|err| err.to_string())?;
 
     json::decode(&json_string).map_err(|err| format!("Error parsing response: {} {}", json_string, err))
 }

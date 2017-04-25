@@ -202,10 +202,10 @@ fn main() {
     if let Some(true) = config.stdout_broadcast {
         let subscriber = fanout.subscribe();
         thread::spawn(move || for message in subscriber.iter() {
-            info!("Fanout broadcast received: {:?} {}",
-                  message.opcode,
-                  message.payload)
-        });
+                          info!("Fanout broadcast received: {:?} {}",
+                                message.opcode,
+                                message.payload)
+                      });
     }
 
     let bitbucket = bitbucket::Bitbucket::new(&config.bitbucket, &fanout);
@@ -261,7 +261,10 @@ fn main() {
         let sleep_duration = match schedule {
             Some(ref sch) => {
                 // TODO: Fix these unwrapping
-                (sch.next_utc().unwrap()).signed_duration_since(UTC::now()).to_std().unwrap()
+                (sch.next_utc().unwrap())
+                    .signed_duration_since(UTC::now())
+                    .to_std()
+                    .unwrap()
             }
             None => fixed_interval.unwrap(),
         };
@@ -278,11 +281,15 @@ fn read_config<R>(path: &str, reader: R) -> Result<String, String>
 {
     let mut file: Box<std::io::Read> = match path {
         "-" => Box::new(reader),
-        path => Box::new(File::open(path).map_err(|e| format!("Unable to read file because: {}", e))?),
+        path => {
+            Box::new(File::open(path)
+                         .map_err(|e| format!("Unable to read file because: {}", e))?)
+        }
     };
 
     let mut json = String::new();
-    file.read_to_string(&mut json).map_err(|e| format!("Unable to read config: {}", e))?;
+    file.read_to_string(&mut json)
+        .map_err(|e| format!("Unable to read config: {}", e))?;
     Ok(json)
 }
 
@@ -371,9 +378,9 @@ fn handle_pull_request(pr: PullRequest,
             fanout.broadcast(&Message::new(OpCode::BuildNotFound, &pr));
             let pr = pr_transformer.pre_build_scheduling(pr, repo, ci)?;
             schedule_build(&pr, ci, repo).and_then(|build| {
-                fanout.broadcast(&Message::new(OpCode::BuildScheduled, &build));
-                Ok(())
-            })
+                                                       fanout.broadcast(&Message::new(OpCode::BuildScheduled, &build));
+                                                       Ok(())
+                                                   })
         }
         Some(build) => {
             fanout.broadcast(&Message::new(OpCode::BuildFound, &build));
@@ -385,7 +392,8 @@ fn handle_pull_request(pr: PullRequest,
                     BuildState::Finished => OpCode::BuildFinished { success: build_status == BuildStatus::Success },
                 };
                 fanout.broadcast(&Message::new(opcode, &build));
-                let pr = pr_transformer.pre_build_status_posting(pr, &build, repo, ci)?;
+                let pr = pr_transformer
+                    .pre_build_status_posting(pr, &build, repo, ci)?;
                 if post_build {
                     repo.post_build(&pr, &build)?;
                 }
@@ -419,13 +427,23 @@ fn check_build_status(pr: &PullRequest,
         BuildState::Finished => {
             match build.status {
                 BuildStatus::Success => {
-                    repo.build_success(pr, build).and(Ok((BuildState::Finished, BuildStatus::Success)))
+                    repo.build_success(pr, build)
+                        .and(Ok((BuildState::Finished, BuildStatus::Success)))
                 }
-                ref status => repo.build_failure(pr, build).and(Ok((BuildState::Finished, status.to_owned()))),
+                ref status => {
+                    repo.build_failure(pr, build)
+                        .and(Ok((BuildState::Finished, status.to_owned())))
+                }
             }
         }
-        BuildState::Running => repo.build_running(pr, build).and(Ok((BuildState::Running, build.status.to_owned()))),
-        BuildState::Queued => repo.build_queued(pr, build).and(Ok((BuildState::Queued, build.status.to_owned()))),
+        BuildState::Running => {
+            repo.build_running(pr, build)
+                .and(Ok((BuildState::Running, build.status.to_owned())))
+        }
+        BuildState::Queued => {
+            repo.build_queued(pr, build)
+                .and(Ok((BuildState::Queued, build.status.to_owned())))
+        }
     }
 }
 
@@ -441,17 +459,17 @@ fn to_option_str(opt: &Option<String>) -> Option<&str> {
 fn configure_logger<'a>(log_level: &Option<String>) -> fern::DispatchConfig<'a> {
     let log_level = resolve_log_level(log_level)
         .or_else(|| {
-            panic!("Unknown log level `{}``", log_level.as_ref().unwrap());
-        })
+                     panic!("Unknown log level `{}``", log_level.as_ref().unwrap());
+                 })
         .unwrap();
 
     fern::DispatchConfig {
         format: Box::new(|msg: &str, level: &log::LogLevel, _location: &log::LogLocation| {
-            format!("[{}][{}] {}",
-                    time::now().strftime("%FT%T%z").unwrap(),
-                    level,
-                    msg)
-        }),
+                             format!("[{}][{}] {}",
+                                     time::now().strftime("%FT%T%z").unwrap(),
+                                     level,
+                                     msg)
+                         }),
         output: vec![fern::OutputConfig::stdout()],
         level: log_level,
     }
@@ -605,8 +623,8 @@ mod tests {
     fn it_reads_from_config_file() {
         let mut expected = String::new();
         if let Err(err) = File::open("tests/fixtures/config.json")
-            .unwrap()
-            .read_to_string(&mut expected) {
+               .unwrap()
+               .read_to_string(&mut expected) {
             panic!("Unable to read fixture: {}", err);
         }
         let actual = read_config("tests/fixtures/config.json", Cursor::new("")).unwrap();
@@ -639,21 +657,21 @@ mod tests {
                 base_url: "https://www.foobar.com/rest".to_string(),
             },
             fusionner: Some(::transformer::FusionnerConfiguration {
-                notes_namespace: Some("foobar".to_string()),
-                push: Some(true),
-                repository: ::fusionner::RepositoryConfiguration {
-                    uri: "https://www.example.com/stash/scm/eg/foobar.git".to_string(),
-                    username: Some("username".to_string()),
-                    password: Some(fusionner::Password::new("password")),
-                    key: None,
-                    key_passphrase: None,
-                    checkout_path: "target/test_repo".to_string(),
-                    fetch_refspecs: vec![],
-                    push_refspecs: vec![],
-                    signature_name: Some("pr_demon".to_string()),
-                    signature_email: Some("pr_demon@example.com".to_string()),
-                },
-            }),
+                                notes_namespace: Some("foobar".to_string()),
+                                push: Some(true),
+                                repository: ::fusionner::RepositoryConfiguration {
+                                    uri: "https://www.example.com/stash/scm/eg/foobar.git".to_string(),
+                                    username: Some("username".to_string()),
+                                    password: Some(fusionner::Password::new("password")),
+                                    key: None,
+                                    key_passphrase: None,
+                                    checkout_path: "target/test_repo".to_string(),
+                                    fetch_refspecs: vec![],
+                                    push_refspecs: vec![],
+                                    signature_name: Some("pr_demon".to_string()),
+                                    signature_email: Some("pr_demon@example.com".to_string()),
+                                },
+                            }),
             run_interval: Interval::Fixed { interval: 999u64 },
             stdout_broadcast: Some(false),
             post_build: false,

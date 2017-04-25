@@ -47,9 +47,9 @@ impl<'repo> Fusionner<'repo> {
         }
 
         Ok(Fusionner {
-            repo: repo,
-            config: config.clone(),
-        })
+               repo: repo,
+               config: config.clone(),
+           })
     }
 
     fn make_merger<'cb>(repo: &'repo fusionner::git::Repository<'repo>,
@@ -70,8 +70,8 @@ impl<'repo> Fusionner<'repo> {
         let pr_id = pr.id;
 
         Box::new(move |_reference : _, _target_reference : _, _oid : _, _target_oid : _| {
-            format!("refs/pull/{}/merge", pr_id)
-        })
+                     format!("refs/pull/{}/merge", pr_id)
+                 })
     }
 }
 
@@ -113,7 +113,10 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
 
             references.insert(notes_refspec.to_string());
 
-            let references: Vec<String> = references.iter().map(|s| fusionner::git::RefspecStr::to_forced(s)).collect();
+            let references: Vec<String> = references
+                .iter()
+                .map(|s| fusionner::git::RefspecStr::to_forced(s))
+                .collect();
             info!("Fetching references");
             debug!("{:?}", references);
             let references_slice: Vec<&str> = references.iter().map(|s| &**s).collect();
@@ -137,7 +140,10 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
 
         if self.config.push != Some(false) {
             references.insert(notes_refspec.to_string());
-            let references: Vec<String> = references.iter().map(|s| fusionner::git::RefspecStr::to_forced(s)).collect();
+            let references: Vec<String> = references
+                .iter()
+                .map(|s| fusionner::git::RefspecStr::to_forced(s))
+                .collect();
             let references_slice: Vec<&str> = references.iter().map(|s| &**s).collect();
             info!("Pushing to remote");
             debug!("{:?}", references);
@@ -191,7 +197,10 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
         let target_oid = map_err!(git2::Oid::from_str(&pr.to_commit))?;
         let merge_commit = map_err!(self.repo.repository.find_commit(merge_oid))?;
 
-        let pr_oid: Vec<git2::Oid> = merge_commit.parent_ids().filter(|oid| *oid != target_oid).collect();
+        let pr_oid: Vec<git2::Oid> = merge_commit
+            .parent_ids()
+            .filter(|oid| *oid != target_oid)
+            .collect();
 
         if pr_oid.len() != 1 {
             return Err(format!("Exactly one non-target OID was not found: {:?}", pr_oid));
@@ -366,7 +375,8 @@ mod tests {
             let mut checkout_builder = git2::build::CheckoutBuilder::new();
             checkout_builder.force();
 
-            repo.checkout_tree(tree.as_object(), Some(&mut checkout_builder)).unwrap();
+            repo.checkout_tree(tree.as_object(), Some(&mut checkout_builder))
+                .unwrap();
             parent_commit.push(commit);
         }
 

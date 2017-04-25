@@ -171,7 +171,8 @@ impl ::UsernameAndPassword for Bitbucket {
 impl ::Repository for Bitbucket {
     fn get_pr_list(&self) -> Result<Vec<::PullRequest>, String> {
         let mut headers = rest::Headers::new();
-        headers.add_authorization_header(self as &::UsernameAndPassword)
+        headers
+            .add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header();
         let url = format!("{}/rest/api/latest/projects/{}/repos/{}/pull-requests",
                           self.credentials.base_url,
@@ -181,23 +182,23 @@ impl ::Repository for Bitbucket {
         let prs = rest::get::<PagedApi<PullRequest>>(&url, headers.headers)
             .map_err(|err| format!("Error getting list of Pull Requests {}", err))?;
         Ok(prs.values
-            .iter()
-            .map(|pr| {
-                ::PullRequest {
-                    id: pr.id,
-                    web_url: pr.links["self"][0].href.to_string(),
-                    from_ref: pr.fromRef.id.to_string(),
-                    from_commit: pr.fromRef.latestCommit.to_string(),
-                    to_ref: pr.toRef.id.to_string(),
-                    to_commit: pr.toRef.latestCommit.to_string(),
-                    title: pr.title.to_string(),
-                    author: ::User {
-                        name: pr.author.user.displayName.to_string(),
-                        email: pr.author.user.emailAddress.to_string(),
-                    },
-                }
-            })
-            .collect())
+               .iter()
+               .map(|pr| {
+            ::PullRequest {
+                id: pr.id,
+                web_url: pr.links["self"][0].href.to_string(),
+                from_ref: pr.fromRef.id.to_string(),
+                from_commit: pr.fromRef.latestCommit.to_string(),
+                to_ref: pr.toRef.id.to_string(),
+                to_commit: pr.toRef.latestCommit.to_string(),
+                title: pr.title.to_string(),
+                author: ::User {
+                    name: pr.author.user.displayName.to_string(),
+                    email: pr.author.user.emailAddress.to_string(),
+                },
+            }
+        })
+               .collect())
     }
 
     fn build_queued(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
@@ -245,13 +246,15 @@ impl Bitbucket {
     }
 
     fn matching_comments(comments: &[Comment], text: &str) -> Option<Comment> {
-        comments.iter()
+        comments
+            .iter()
             .find(|&comment| comment.text == text)
             .cloned()
     }
 
     fn matching_comments_substring(comments: &[Comment], substr: &str) -> Option<Comment> {
-        comments.iter()
+        comments
+            .iter()
             .find(|&comment| comment.text.as_str().contains(substr))
             .cloned()
     }
@@ -268,8 +271,12 @@ impl Bitbucket {
         };
 
         let mut event_payload = json_dictionary::JsonDictionary::new();
-        event_payload.insert("pr", &pr).expect("PR should be RustcEncodable");
-        event_payload.insert("build", &build).expect("Build should be RustcEncodable");
+        event_payload
+            .insert("pr", &pr)
+            .expect("PR should be RustcEncodable");
+        event_payload
+            .insert("build", &build)
+            .expect("Build should be RustcEncodable");
 
         let (comment, opcode) = match self.get_comments(pr.id) {
             Ok(ref comments) => {
@@ -288,7 +295,9 @@ impl Bitbucket {
         };
 
         if let Ok(ref comment) = comment {
-            event_payload.insert("comment", comment).expect("Comment should be RustcEncodable");
+            event_payload
+                .insert("comment", comment)
+                .expect("Comment should be RustcEncodable");
         }
 
         self.broadcast(&format!("Comment::{}", opcode), &event_payload);
@@ -297,7 +306,8 @@ impl Bitbucket {
 
     fn get_comments(&self, pr_id: i32) -> Result<Vec<Comment>, String> {
         let mut headers = rest::Headers::new();
-        headers.add_authorization_header(self as &::UsernameAndPassword)
+        headers
+            .add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header();
         let url = format!("{}/rest/api/latest/projects/{}/repos/{}/pull-requests/{}/activities?fromType=COMMENT",
                           self.credentials.base_url,
@@ -308,19 +318,21 @@ impl Bitbucket {
         let activities = rest::get::<PagedApi<Activity>>(&url, headers.headers)
             .map_err(|err| format!("Error getting comments {}", err))?;
 
-        Ok(activities.values
-            .iter()
-            .filter(|&activity| activity.comment.is_some() && activity.user.name == self.credentials.username)
-            .map(|activity| {
-                // won't panic because of filter above
-                activity.comment.as_ref().unwrap().to_owned()
-            })
-            .collect())
+        Ok(activities
+               .values
+               .iter()
+               .filter(|&activity| activity.comment.is_some() && activity.user.name == self.credentials.username)
+               .map(|activity| {
+                        // won't panic because of filter above
+                        activity.comment.as_ref().unwrap().to_owned()
+                    })
+               .collect())
     }
 
     fn post_comment(&self, pr_id: i32, text: &str) -> Result<Comment, String> {
         let mut headers = rest::Headers::new();
-        headers.add_authorization_header(self as &::UsernameAndPassword)
+        headers
+            .add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header()
             .add_content_type_json_header();
 
@@ -335,21 +347,22 @@ impl Bitbucket {
                                  &body,
                                  headers.headers,
                                  &hyper::status::StatusCode::Created)
-            .map_err(|err| format!("Error posting comment {}", err))?
-            .to_owned())
+                   .map_err(|err| format!("Error posting comment {}", err))?
+                   .to_owned())
     }
 
     fn edit_comment(&self, pr_id: i32, comment: &Comment, text: &str) -> Result<Comment, String> {
         let mut headers = rest::Headers::new();
-        headers.add_authorization_header(self as &::UsernameAndPassword)
+        headers
+            .add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header()
             .add_content_type_json_header();
 
         let body = json::encode(&CommentEdit {
-                text: text.to_owned(),
-                version: comment.version,
-            })
-            .unwrap();
+                                     text: text.to_owned(),
+                                     version: comment.version,
+                                 })
+                .unwrap();
         let url = format!("{}/rest/api/latest/projects/{}/repos/{}/pull-requests/{}/comments/{}",
                           self.credentials.base_url,
                           self.credentials.project_slug,
@@ -358,8 +371,8 @@ impl Bitbucket {
                           comment.id);
 
         Ok(rest::put::<Comment>(&url, &body, headers.headers, &hyper::status::StatusCode::Ok)
-            .map_err(|err| format!("Error posting comment {}", err))?
-            .to_owned())
+               .map_err(|err| format!("Error posting comment {}", err))?
+               .to_owned())
 
     }
 
@@ -367,7 +380,8 @@ impl Bitbucket {
         let bitbucket_build = Bitbucket::make_build(build);
 
         let mut headers = rest::Headers::new();
-        headers.add_authorization_header(self as &::UsernameAndPassword)
+        headers
+            .add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header()
             .add_content_type_json_header();
 
@@ -376,8 +390,8 @@ impl Bitbucket {
                           self.credentials.base_url,
                           pr.from_commit);
 
-        let response =
-            rest::post_raw(&url, &body, headers.headers).map_err(|err| format!("Error posting build {}", err))?;
+        let response = rest::post_raw(&url, &body, headers.headers)
+            .map_err(|err| format!("Error posting build {}", err))?;
         match response.status() {
             status if status == &hyper::status::StatusCode::NoContent => Ok(bitbucket_build),
             e => Err(e.to_string()),
@@ -395,7 +409,8 @@ impl Bitbucket {
             _ => BuildState::INPROGRESS,
         };
 
-        let description = build.status_text
+        let description = build
+            .status_text
             .as_ref()
             .map_or_else(|| "".to_string(), |s| s.to_string());
 
@@ -451,7 +466,8 @@ fn make_success_comment(build: &::BuildDetails, pr: &::PullRequest, config: &Bit
                                 &config.project_slug,
                                 &config.repo_slug,
                                 &pr.from_commit);
-    let status_text = build.status_text
+    let status_text = build
+        .status_text
         .as_ref()
         .map_or_else(|| "".to_string(), |s| s.to_string());
 
@@ -474,7 +490,8 @@ fn make_failure_comment(build: &::BuildDetails, pr: &::PullRequest, config: &Bit
                                 &config.project_slug,
                                 &config.repo_slug,
                                 &pr.from_commit);
-    let status_text = build.status_text
+    let status_text = build
+        .status_text
         .as_ref()
         .map_or_else(|| "".to_string(), |s| s.to_string());
 
