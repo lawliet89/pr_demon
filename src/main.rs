@@ -14,6 +14,7 @@ extern crate reqwest;
 extern crate rustc_serialize;
 extern crate serde;
 extern crate serde_json;
+extern crate serde_yaml;
 extern crate time;
 extern crate url;
 
@@ -24,7 +25,7 @@ mod rest;
 mod teamcity;
 
 use std::fs::File;
-use std::io::{self, Read};
+use std::io;
 use std::iter;
 use std::boxed::Box;
 use std::thread;
@@ -42,7 +43,9 @@ Usage:
   pr_demon [options] <configuration-file>
   pr_demon -h | --help
 
-Use with a <configuration-file> to specify a path to configuration. Use `-` to read from stdin
+Use with a <configuration-file> to specify a path to configuration. Use `-` to read from stdin.
+
+Configuration file is expected to be in YAML format.
 
 Options:
   -h --help                 Show this screen.
@@ -199,8 +202,8 @@ fn main() {
         panic!("Failed to initialize global logger: {}", e);
     }
 
-    let config_json = read_config(&args.arg_configuration_file, io::stdin()).unwrap();
-    let config = parse_config(&config_json).unwrap();
+    let config_file = read_config(&args.arg_configuration_file, io::stdin()).unwrap();
+    let config = parse_config(config_file).unwrap();
 
     let mut fanout = Fanout::<Message>::new();
     if let Some(true) = config.stdout_broadcast {
@@ -280,25 +283,24 @@ fn main() {
     }
 }
 
-fn read_config<R>(path: &str, reader: R) -> Result<String, String>
-    where R: std::io::Read
+fn read_config<R>(path: &str, stdin: R) -> Result<Box<std::io::Read>, String>
+    where R: std::io::Read + 'static
 {
-    let mut file: Box<std::io::Read> = match path {
-        "-" => Box::new(reader),
+    let reader: Box<std::io::Read> = match path {
+        "-" => Box::new(stdin),
         path => {
             Box::new(File::open(path)
                          .map_err(|e| format!("Unable to read file because: {}", e))?)
         }
     };
 
-    let mut json = String::new();
-    file.read_to_string(&mut json)
-        .map_err(|e| format!("Unable to read config: {}", e))?;
-    Ok(json)
+    Ok(reader)
 }
 
-fn parse_config(json: &str) -> Result<Config, String> {
-    serde_json::from_str(json).map_err(|err| format!("Unable to decode JSON value {}", err))
+fn parse_config<R>(reader: R) -> Result<Config, String>
+    where R: std::io::Read
+{
+    serde_yaml::from_reader(reader).map_err(|err| format!("Unable to decode YAML file {}", err))
 }
 
 fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<BuildDetails> {
@@ -626,12 +628,15 @@ mod tests {
     #[test]
     fn it_reads_from_config_file() {
         let mut expected = String::new();
-        if let Err(err) = File::open("tests/fixtures/config.json")
+        if let Err(err) = File::open("tests/fixtures/config.yaml")
                .unwrap()
                .read_to_string(&mut expected) {
             panic!("Unable to read fixture: {}", err);
         }
-        let actual = read_config("tests/fixtures/config.json", Cursor::new("")).unwrap();
+        let mut reader = read_config("tests/fixtures/config.yaml", Cursor::new("")).unwrap();
+        let mut actual = String::new();
+        reader.read_to_string(&mut actual).unwrap();
+
         assert_eq!(expected, actual);
     }
 
@@ -640,7 +645,10 @@ mod tests {
         let payload = "foo bar baz";
         let input = Cursor::new(payload);
 
-        let actual = read_config("-", input).unwrap();
+        let mut reader = read_config("-", input).unwrap();
+        let mut actual = String::new();
+        reader.read_to_string(&mut actual).unwrap();
+
         assert_eq!(payload, actual);
     }
 
@@ -681,8 +689,8 @@ mod tests {
             post_build: false,
         };
 
-        let json_string = read_config("tests/fixtures/config.json", Cursor::new("")).unwrap();
-        let actual = parse_config(&json_string).unwrap();
+        let reader = read_config("tests/fixtures/config.yaml", Cursor::new("")).unwrap();
+        let actual = parse_config(reader).unwrap();
 
         assert_eq!(expected, actual);
     }
