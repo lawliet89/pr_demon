@@ -12,17 +12,19 @@ extern crate git2;
 extern crate hyper;
 extern crate reqwest;
 extern crate rustc_serialize;
-extern crate serde;
 extern crate serde_json;
 extern crate serde_yaml;
+extern crate serde;
 extern crate time;
 extern crate url;
+extern crate ws;
 
 mod bitbucket;
 mod fanout;
 mod transformer;
 mod rest;
 mod teamcity;
+mod websocket;
 
 use std::fs::File;
 use std::io;
@@ -67,6 +69,8 @@ struct Config {
     run_interval: Interval,
     stdout_broadcast: Option<bool>,
     post_build: bool,
+    /// If you want to enable a websocket endpoint, set the listen address here
+    websocket: Option<String>,
 }
 
 #[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
@@ -213,6 +217,12 @@ fn main() {
                                 message.opcode,
                                 message.payload)
                       });
+    }
+
+    if let Some(ref address) = config.websocket {
+        let subscriber = fanout.subscribe();
+        // Panic if we cannot start server
+        websocket::listen(address, subscriber).unwrap();
     }
 
     let bitbucket = bitbucket::Bitbucket::new(&config.bitbucket, &fanout);
