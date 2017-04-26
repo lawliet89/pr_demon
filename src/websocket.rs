@@ -12,7 +12,7 @@ struct Client {
 
 impl Handler for Client {
     fn on_message(&mut self, message: Message) -> Result<(), ws::Error> {
-        debug!("Received message {:?}", msg);
+        debug!("Received message {:?}", message);
         self.sender.send(message)
     }
 }

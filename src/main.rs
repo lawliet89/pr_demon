@@ -385,21 +385,22 @@ fn handle_pull_request(pr: PullRequest,
                        fanout: &Fanout<Message>,
                        post_build: bool)
                        -> Result<(), String> {
-    fanout.broadcast(&Message::new(OpCode::OpenPullRequest, &pr));
+
+    fanout.broadcast(Message::new(OpCode::OpenPullRequest, &pr)?);
 
     let pr = pr_transformer.pre_build_retrieval(pr, repo, ci)?;
 
     match get_latest_build(&pr, ci) {
         None => {
-            fanout.broadcast(&Message::new(OpCode::BuildNotFound, &pr));
+            fanout.broadcast(Message::new(OpCode::BuildNotFound, &pr)?);
             let pr = pr_transformer.pre_build_scheduling(pr, repo, ci)?;
             schedule_build(&pr, ci, repo).and_then(|build| {
-                                                       fanout.broadcast(&Message::new(OpCode::BuildScheduled, &build));
+                                                       fanout.broadcast(Message::new(OpCode::BuildScheduled, &build)?);
                                                        Ok(())
                                                    })
         }
         Some(build) => {
-            fanout.broadcast(&Message::new(OpCode::BuildFound, &build));
+            fanout.broadcast(Message::new(OpCode::BuildFound, &build)?);
             let pr = pr_transformer.pre_build_checking(pr, &build, repo, ci)?;
             check_build_status(&pr, &build, repo).and_then(|(build_state, build_status)| {
                 let opcode = match build_state {
@@ -407,7 +408,7 @@ fn handle_pull_request(pr: PullRequest,
                     BuildState::Running => OpCode::BuildRunning,
                     BuildState::Finished => OpCode::BuildFinished { success: build_status == BuildStatus::Success },
                 };
-                fanout.broadcast(&Message::new(opcode, &build));
+                fanout.broadcast(Message::new(opcode, &build)?);
                 let pr = pr_transformer
                     .pre_build_status_posting(pr, &build, repo, ci)?;
                 if post_build {

@@ -4,7 +4,7 @@ use std::thread::spawn;
 use std::marker::Send;
 
 use serde::Serialize;
-use serde_json;
+use serde_json::{self, Value};
 
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub enum OpCode {
@@ -21,19 +21,19 @@ pub enum OpCode {
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct Message {
     pub opcode: OpCode,
-    pub payload: String,
+    pub payload: Value,
 }
 
 impl Message {
-    pub fn new<T>(opcode: OpCode, payload: &T) -> Message
+    pub fn new<T>(opcode: OpCode, payload: &T) -> Result<Message, String>
         where T: Serialize
     {
-        // FIXME: Remove unwrap()
-        let encoded = serde_json::to_string(payload).unwrap();
-        Message {
-            opcode: opcode,
-            payload: encoded,
-        }
+        let encoded = serde_json::to_value(&payload)
+            .map_err(|e| e.to_string())?;
+        Ok(Message {
+               opcode: opcode,
+               payload: encoded,
+           })
     }
 }
 
@@ -86,9 +86,16 @@ impl<T> Fanout<T>
         rx
     }
 
-    pub fn broadcast(&self, message: &T) {
-        if let Err(err) = self.broadcast_tx.send(message.clone()) {
-            panic!("Broadcaster has been deallocated {}", err);
+    fn _broadcast(&self, message: T) -> Result<(), String> {
+        if let Err(err) = self.broadcast_tx.send(message) {
+            Err(format!("Broadcaster has been deallocated {}", err))?;
+        }
+        Ok(())
+    }
+
+    pub fn broadcast(&self, message: T) {
+        if let Err(e) = self._broadcast(message) {
+            panic!(e);
         }
     }
 }
