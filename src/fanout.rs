@@ -102,8 +102,7 @@ impl<T> Fanout<T>
 
 #[cfg(test)]
 mod tests {
-    extern crate timebomb;
-    use self::timebomb::timeout_ms;
+    use timebomb::timeout_ms;
     use super::{Fanout, Message, OpCode};
     use super::super::{PullRequest, User};
 
@@ -132,10 +131,10 @@ mod tests {
         let subscriber_one = fanout.subscribe();
         let subscriber_two = fanout.subscribe();
 
-        let expected_message = Message::new(OpCode::OpenPullRequest, &test_payload());
+        let expected_message = Message::new(OpCode::OpenPullRequest, &test_payload()).unwrap();
         let expected_message_clone = expected_message.clone();
 
-        fanout.broadcast(&expected_message);
+        fanout.broadcast(expected_message.clone());
 
         timeout_ms(move || {
                        let message = subscriber_one.recv();
@@ -161,9 +160,9 @@ mod tests {
             assert_eq!(fanout.subscribers.lock().unwrap().len(), 2);
         }
 
-        let expected_message = Message::new(OpCode::OpenPullRequest, &test_payload());
+        let expected_message = Message::new(OpCode::OpenPullRequest, &test_payload()).unwrap();
 
-        fanout.broadcast(&expected_message);
+        fanout.broadcast(expected_message.clone());
 
         timeout_ms(move || {
                        let message = subscriber_one.recv();

@@ -48,3 +48,56 @@ pub fn listen<T>(address: &str, receiver: Receiver<T>) -> Result<(), String>
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json;
+    use timebomb::timeout_ms;
+    use ws::{connect, CloseCode};
+
+    use super::listen;
+    use fanout::{Fanout, Message, OpCode};
+
+    const TIMEOUT: u32 = 1000;
+
+    fn test_payload() -> ::PullRequest {
+        ::PullRequest {
+            id: 111,
+            web_url: "http://www.foobar.com".to_owned(),
+            from_ref: "abc".to_owned(),
+            from_commit: "ffffff".to_owned(),
+            to_ref: "abc".to_owned(),
+            to_commit: "ffffff".to_owned(),
+            title: "A very important PR".to_owned(),
+            author: ::User {
+                name: "Aaron Xiao Ming".to_owned(),
+                email: "aaron@xiao.ming".to_owned(),
+            },
+        }
+    }
+
+    #[test]
+    fn websocket_server_is_set_up() {
+        let message = Message::new(OpCode::OpenPullRequest, &test_payload()).unwrap();
+
+        let mut fanout = Fanout::<Message>::new();
+        let subscriber = fanout.subscribe();
+
+        listen("127.0.0.1:8080", subscriber).unwrap();
+
+        timeout_ms(move || {
+            connect("ws://127.0.0.1:8080", move |out| {
+                fanout.broadcast(message.clone());
+                let expected_message = serde_json::to_string(&message).unwrap();
+
+                move |msg| {
+                    let msg = format!("{}", msg);
+                    assert_eq!(msg, expected_message);
+                    out.close(CloseCode::Normal)
+                }
+            })
+                    .unwrap()
+        },
+                   TIMEOUT);
+    }
+}

@@ -26,3 +26,4 @@ fusionner:
   push: true
 stdout_broadcast: false
 post_build: false
+websocket: 0.0.0.0:8080

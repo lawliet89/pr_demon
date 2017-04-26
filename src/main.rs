@@ -19,6 +19,9 @@ extern crate time;
 extern crate url;
 extern crate ws;
 
+#[cfg(test)]
+extern crate timebomb;
+
 mod bitbucket;
 mod fanout;
 mod transformer;
@@ -698,6 +701,7 @@ mod tests {
             run_interval: Interval::Fixed { interval: 999u64 },
             stdout_broadcast: Some(false),
             post_build: false,
+            websocket: Some("0.0.0.0:8080".to_string()),
         };
 
         let reader = read_config("tests/fixtures/config.yaml", Cursor::new("")).unwrap();
