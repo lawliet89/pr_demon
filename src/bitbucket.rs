@@ -238,12 +238,13 @@ impl Bitbucket {
         }
     }
 
-    fn broadcast<T>(&self, opcode: &str, payload: &T)
+    fn broadcast<T>(&self, opcode: &str, payload: &T) -> Result<(), String>
         where T: Serialize
     {
         let opcode = fanout::OpCode::Custom { payload: format!("Bitbucket::{}", opcode).to_owned() };
-        let message = fanout::Message::new(opcode, payload);
-        self.broadcaster.broadcast(&message);
+        let message = fanout::Message::new(opcode, payload)?;
+        self.broadcaster.broadcast(message);
+        Ok(())
     }
 
     fn matching_comments(comments: &[Comment], text: &str) -> Option<Comment> {
@@ -299,7 +300,7 @@ impl Bitbucket {
                                      .map_err(|e| e.to_string())?);
         }
 
-        self.broadcast(&format!("Comment::{}", opcode), &event_payload);
+        self.broadcast(&format!("Comment::{}", opcode), &event_payload)?;
         comment
     }
 

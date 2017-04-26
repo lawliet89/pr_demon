@@ -12,17 +12,22 @@ extern crate git2;
 extern crate hyper;
 extern crate reqwest;
 extern crate rustc_serialize;
-extern crate serde;
 extern crate serde_json;
 extern crate serde_yaml;
+extern crate serde;
 extern crate time;
 extern crate url;
+extern crate ws;
+
+#[cfg(test)]
+extern crate timebomb;
 
 mod bitbucket;
 mod fanout;
 mod transformer;
 mod rest;
 mod teamcity;
+mod websocket;
 
 use std::fs::File;
 use std::io;
@@ -67,6 +72,8 @@ struct Config {
     run_interval: Interval,
     stdout_broadcast: Option<bool>,
     post_build: bool,
+    /// If you want to enable a websocket endpoint, set the listen address here
+    websocket: Option<String>,
 }
 
 #[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
@@ -213,6 +220,12 @@ fn main() {
                                 message.opcode,
                                 message.payload)
                       });
+    }
+
+    if let Some(ref address) = config.websocket {
+        let subscriber = fanout.subscribe();
+        // Panic if we cannot start server
+        websocket::listen(address, subscriber).unwrap();
     }
 
     let bitbucket = bitbucket::Bitbucket::new(&config.bitbucket, &fanout);
@@ -375,21 +388,22 @@ fn handle_pull_request(pr: PullRequest,
                        fanout: &Fanout<Message>,
                        post_build: bool)
                        -> Result<(), String> {
-    fanout.broadcast(&Message::new(OpCode::OpenPullRequest, &pr));
+
+    fanout.broadcast(Message::new(OpCode::OpenPullRequest, &pr)?);
 
     let pr = pr_transformer.pre_build_retrieval(pr, repo, ci)?;
 
     match get_latest_build(&pr, ci) {
         None => {
-            fanout.broadcast(&Message::new(OpCode::BuildNotFound, &pr));
+            fanout.broadcast(Message::new(OpCode::BuildNotFound, &pr)?);
             let pr = pr_transformer.pre_build_scheduling(pr, repo, ci)?;
             schedule_build(&pr, ci, repo).and_then(|build| {
-                                                       fanout.broadcast(&Message::new(OpCode::BuildScheduled, &build));
+                                                       fanout.broadcast(Message::new(OpCode::BuildScheduled, &build)?);
                                                        Ok(())
                                                    })
         }
         Some(build) => {
-            fanout.broadcast(&Message::new(OpCode::BuildFound, &build));
+            fanout.broadcast(Message::new(OpCode::BuildFound, &build)?);
             let pr = pr_transformer.pre_build_checking(pr, &build, repo, ci)?;
             check_build_status(&pr, &build, repo).and_then(|(build_state, build_status)| {
                 let opcode = match build_state {
@@ -397,7 +411,7 @@ fn handle_pull_request(pr: PullRequest,
                     BuildState::Running => OpCode::BuildRunning,
                     BuildState::Finished => OpCode::BuildFinished { success: build_status == BuildStatus::Success },
                 };
-                fanout.broadcast(&Message::new(opcode, &build));
+                fanout.broadcast(Message::new(opcode, &build)?);
                 let pr = pr_transformer
                     .pre_build_status_posting(pr, &build, repo, ci)?;
                 if post_build {
@@ -687,6 +701,7 @@ mod tests {
             run_interval: Interval::Fixed { interval: 999u64 },
             stdout_broadcast: Some(false),
             post_build: false,
+            websocket: Some("0.0.0.0:8080".to_string()),
         };
 
         let reader = read_config("tests/fixtures/config.yaml", Cursor::new("")).unwrap();

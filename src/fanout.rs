@@ -4,7 +4,7 @@ use std::thread::spawn;
 use std::marker::Send;
 
 use serde::Serialize;
-use serde_json;
+use serde_json::{self, Value};
 
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub enum OpCode {
@@ -21,19 +21,19 @@ pub enum OpCode {
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct Message {
     pub opcode: OpCode,
-    pub payload: String,
+    pub payload: Value,
 }
 
 impl Message {
-    pub fn new<T>(opcode: OpCode, payload: &T) -> Message
+    pub fn new<T>(opcode: OpCode, payload: &T) -> Result<Message, String>
         where T: Serialize
     {
-        // FIXME: Remove unwrap()
-        let encoded = serde_json::to_string(payload).unwrap();
-        Message {
-            opcode: opcode,
-            payload: encoded,
-        }
+        let encoded = serde_json::to_value(&payload)
+            .map_err(|e| e.to_string())?;
+        Ok(Message {
+               opcode: opcode,
+               payload: encoded,
+           })
     }
 }
 
@@ -86,17 +86,23 @@ impl<T> Fanout<T>
         rx
     }
 
-    pub fn broadcast(&self, message: &T) {
-        if let Err(err) = self.broadcast_tx.send(message.clone()) {
-            panic!("Broadcaster has been deallocated {}", err);
+    fn _broadcast(&self, message: T) -> Result<(), String> {
+        if let Err(err) = self.broadcast_tx.send(message) {
+            Err(format!("Broadcaster has been deallocated {}", err))?;
+        }
+        Ok(())
+    }
+
+    pub fn broadcast(&self, message: T) {
+        if let Err(e) = self._broadcast(message) {
+            panic!(e);
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    extern crate timebomb;
-    use self::timebomb::timeout_ms;
+    use timebomb::timeout_ms;
     use super::{Fanout, Message, OpCode};
     use super::super::{PullRequest, User};
 
@@ -125,10 +131,10 @@ mod tests {
         let subscriber_one = fanout.subscribe();
         let subscriber_two = fanout.subscribe();
 
-        let expected_message = Message::new(OpCode::OpenPullRequest, &test_payload());
+        let expected_message = Message::new(OpCode::OpenPullRequest, &test_payload()).unwrap();
         let expected_message_clone = expected_message.clone();
 
-        fanout.broadcast(&expected_message);
+        fanout.broadcast(expected_message.clone());
 
         timeout_ms(move || {
                        let message = subscriber_one.recv();
@@ -154,9 +160,9 @@ mod tests {
             assert_eq!(fanout.subscribers.lock().unwrap().len(), 2);
         }
 
-        let expected_message = Message::new(OpCode::OpenPullRequest, &test_payload());
+        let expected_message = Message::new(OpCode::OpenPullRequest, &test_payload()).unwrap();
 
-        fanout.broadcast(&expected_message);
+        fanout.broadcast(expected_message.clone());
 
         timeout_ms(move || {
                        let message = subscriber_one.recv();
