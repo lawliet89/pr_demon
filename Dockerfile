@@ -13,4 +13,4 @@ RUN cargo build --release --locked
 VOLUME /app/src/config
 
 ENTRYPOINT ["cargo"]
-CMD ["run", "--release", "--", "/app/src/config/config.json"]
+CMD ["run", "--release", "--", "/app/src/config/config.yml"]
