@@ -1,4 +1,4 @@
-FROM lawliet89/debian-rust:1.16
+FROM lawliet89/debian-rust:1.16.0
 MAINTAINER Yong Wen Chua <me@yongwen.xyz>
 
 RUN apt-get update \
