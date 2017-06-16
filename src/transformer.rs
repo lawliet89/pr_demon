@@ -75,10 +75,7 @@ impl<'repo> Fusionner<'repo> {
     fn make_namer<'cb>(pr: &::PullRequest) -> Box<fusionner::merger::MergeReferenceNamerCallback<'cb>> {
         let pr_id = pr.id;
 
-        Box::new(move |_reference, : _
-              _target_reference, : _
-              _oid, : _
-              _target_oid : _| {
+        Box::new(move |_reference, _target_reference, _oid, _target_oid| {
             format!("refs/pull/{}/merge", pr_id)
         })
     }
