@@ -19,10 +19,14 @@ impl Handler for Client {
 
 /// Create a websocket endpoint
 pub fn listen<T>(address: &str, receiver: Receiver<T>) -> Result<(), String>
-    where T: Serialize + Send + Sync + Clone + 'static
+where
+    T: Serialize + Send + Sync + Clone + 'static,
 {
-    let ws = WebSocket::new(|sender| Client { sender: sender })
-        .map_err(|e| e.to_string())?;
+    let ws = WebSocket::new(|sender| Client { sender: sender }).map_err(
+        |e| {
+            e.to_string()
+        },
+    )?;
     let broadcaster = ws.broadcaster();
 
     let address = address.to_string();
@@ -32,18 +36,19 @@ pub fn listen<T>(address: &str, receiver: Receiver<T>) -> Result<(), String>
     Builder::new()
         .name("websocket".to_string())
         .spawn(move || {
-                   ws.listen(address)
-                       .unwrap_or_else(|err| panic!("failed to start websocket listener {}", err));
-               })
+            ws.listen(address).unwrap_or_else(|err| {
+                panic!("failed to start websocket listener {}", err)
+            });
+        })
         .map_err(|e| e.to_string())?;
 
     // Message sender
     Builder::new()
         .name("websocket_sender".to_string())
         .spawn(move || for message in receiver.iter() {
-                   let message = serde_json::to_string(&message).unwrap();
-                   broadcaster.send(message).unwrap()
-               })
+            let message = serde_json::to_string(&message).unwrap();
+            broadcaster.send(message).unwrap()
+        })
         .map_err(|e| e.to_string())?;
 
     Ok(())
@@ -87,18 +92,19 @@ mod tests {
 
         listen("0.0.0.0:56474", subscriber).unwrap();
 
-        timeout_ms(move || {
-            connect("ws://0.0.0.0:56474", move |out| {
-                let expected_message = serde_json::to_string(&message).unwrap();
-                fanout.broadcast(message.clone());
-                move |msg| {
-                    let msg = format!("{}", msg);
-                    assert_eq!(msg, expected_message);
-                    out.close(CloseCode::Normal)
-                }
-            })
-                    .unwrap()
-        },
-                   TIMEOUT);
+        timeout_ms(
+            move || {
+                connect("ws://0.0.0.0:56474", move |out| {
+                    let expected_message = serde_json::to_string(&message).unwrap();
+                    fanout.broadcast(message.clone());
+                    move |msg| {
+                        let msg = format!("{}", msg);
+                        assert_eq!(msg, expected_message);
+                        out.close(CloseCode::Normal)
+                    }
+                }).unwrap()
+            },
+            TIMEOUT,
+        );
     }
 }

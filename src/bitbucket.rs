@@ -175,31 +175,35 @@ impl ::Repository for Bitbucket {
         headers
             .add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header();
-        let url = format!("{}/rest/api/latest/projects/{}/repos/{}/pull-requests",
-                          self.credentials.base_url,
-                          self.credentials.project_slug,
-                          self.credentials.repo_slug);
+        let url = format!(
+            "{}/rest/api/latest/projects/{}/repos/{}/pull-requests",
+            self.credentials.base_url,
+            self.credentials.project_slug,
+            self.credentials.repo_slug
+        );
 
         let prs = rest::get::<PagedApi<PullRequest>>(&url, headers.headers)
             .map_err(|err| format!("Error getting list of Pull Requests {}", err))?;
-        Ok(prs.values
-               .iter()
-               .map(|pr| {
-            ::PullRequest {
-                id: pr.id,
-                web_url: pr.links["self"][0].href.to_string(),
-                from_ref: pr.fromRef.id.to_string(),
-                from_commit: pr.fromRef.latestCommit.to_string(),
-                to_ref: pr.toRef.id.to_string(),
-                to_commit: pr.toRef.latestCommit.to_string(),
-                title: pr.title.to_string(),
-                author: ::User {
-                    name: pr.author.user.displayName.to_string(),
-                    email: pr.author.user.emailAddress.to_string(),
-                },
-            }
-        })
-               .collect())
+        Ok(
+            prs.values
+                .iter()
+                .map(|pr| {
+                    ::PullRequest {
+                        id: pr.id,
+                        web_url: pr.links["self"][0].href.to_string(),
+                        from_ref: pr.fromRef.id.to_string(),
+                        from_commit: pr.fromRef.latestCommit.to_string(),
+                        to_ref: pr.toRef.id.to_string(),
+                        to_commit: pr.toRef.latestCommit.to_string(),
+                        title: pr.title.to_string(),
+                        author: ::User {
+                            name: pr.author.user.displayName.to_string(),
+                            email: pr.author.user.emailAddress.to_string(),
+                        },
+                    }
+                })
+                .collect(),
+        )
     }
 
     fn build_queued(&self, pr: &::PullRequest, build: &::BuildDetails) -> Result<(), String> {
@@ -239,7 +243,8 @@ impl Bitbucket {
     }
 
     fn broadcast<T>(&self, opcode: &str, payload: &T) -> Result<(), String>
-        where T: Serialize
+    where
+        T: Serialize,
     {
         let opcode = fanout::OpCode::Custom { payload: format!("Bitbucket::{}", opcode).to_owned() };
         let message = fanout::Message::new(opcode, payload)?;
@@ -261,11 +266,12 @@ impl Bitbucket {
             .cloned()
     }
 
-    fn update_pr_build_status_comment(&self,
-                                      pr: &::PullRequest,
-                                      build: &::BuildDetails,
-                                      state: &BuildState)
-                                      -> Result<Comment, String> {
+    fn update_pr_build_status_comment(
+        &self,
+        pr: &::PullRequest,
+        build: &::BuildDetails,
+        state: &BuildState,
+    ) -> Result<Comment, String> {
         let text = match *state {
             BuildState::INPROGRESS => make_queued_comment(build, pr, &self.credentials),
             BuildState::FAILED => make_failure_comment(build, pr, &self.credentials),
@@ -273,10 +279,14 @@ impl Bitbucket {
         };
 
         let mut event_payload = Map::new();
-        event_payload.insert("pr".to_string(),
-                             serde_json::to_value(&pr).map_err(|e| e.to_string())?);
-        event_payload.insert("build".to_string(),
-                             serde_json::to_value(&build).map_err(|e| e.to_string())?);
+        event_payload.insert(
+            "pr".to_string(),
+            serde_json::to_value(&pr).map_err(|e| e.to_string())?,
+        );
+        event_payload.insert(
+            "build".to_string(),
+            serde_json::to_value(&build).map_err(|e| e.to_string())?,
+        );
 
         let (comment, opcode) = match self.get_comments(pr.id) {
             Ok(ref comments) => {
@@ -291,16 +301,23 @@ impl Bitbucket {
                     }
                 }
             }
-            Err(err) => (Err(format!("Error getting list of comments {}", err)), "Error"),
+            Err(err) => (
+                Err(format!("Error getting list of comments {}", err)),
+                "Error",
+            ),
         };
 
         if let Ok(ref comment) = comment {
-            event_payload.insert("comment".to_string(),
-                                 serde_json::to_value(&comment)
-                                     .map_err(|e| e.to_string())?);
+            event_payload.insert(
+                "comment".to_string(),
+                serde_json::to_value(&comment).map_err(|e| e.to_string())?,
+            );
         }
 
-        self.broadcast(&format!("Comment::{}", opcode), &event_payload)?;
+        self.broadcast(
+            &format!("Comment::{}", opcode),
+            &event_payload,
+        )?;
         comment
     }
 
@@ -309,24 +326,30 @@ impl Bitbucket {
         headers
             .add_authorization_header(self as &::UsernameAndPassword)
             .add_accept_json_header();
-        let url = format!("{}/rest/api/latest/projects/{}/repos/{}/pull-requests/{}/activities?fromType=COMMENT",
-                          self.credentials.base_url,
-                          self.credentials.project_slug,
-                          self.credentials.repo_slug,
-                          pr_id);
+        let url = format!(
+            "{}/rest/api/latest/projects/{}/repos/{}/pull-requests/{}/activities?fromType=COMMENT",
+            self.credentials.base_url,
+            self.credentials.project_slug,
+            self.credentials.repo_slug,
+            pr_id
+        );
 
         let activities = rest::get::<PagedApi<Activity>>(&url, headers.headers)
             .map_err(|err| format!("Error getting comments {}", err))?;
 
-        Ok(activities
-               .values
-               .iter()
-               .filter(|&activity| activity.comment.is_some() && activity.user.name == self.credentials.username)
-               .map(|activity| {
-                        // won't panic because of filter above
-                        activity.comment.as_ref().unwrap().to_owned()
-                    })
-               .collect())
+        Ok(
+            activities
+                .values
+                .iter()
+                .filter(|&activity| {
+                    activity.comment.is_some() && activity.user.name == self.credentials.username
+                })
+                .map(|activity| {
+                    // won't panic because of filter above
+                    activity.comment.as_ref().unwrap().to_owned()
+                })
+                .collect(),
+        )
     }
 
     fn post_comment(&self, pr_id: i32, text: &str) -> Result<Comment, String> {
@@ -338,18 +361,23 @@ impl Bitbucket {
 
         let body = serde_json::to_string(&CommentSubmit { text: text.to_owned() })
             .map_err(|e| e.to_string())?;
-        let url = format!("{}/rest/api/latest/projects/{}/repos/{}/pull-requests/{}/comments",
-                          self.credentials.base_url,
-                          self.credentials.project_slug,
-                          self.credentials.repo_slug,
-                          pr_id);
+        let url = format!(
+            "{}/rest/api/latest/projects/{}/repos/{}/pull-requests/{}/comments",
+            self.credentials.base_url,
+            self.credentials.project_slug,
+            self.credentials.repo_slug,
+            pr_id
+        );
 
-        Ok(rest::post::<Comment>(&url,
-                                 &body,
-                                 headers.headers,
-                                 &hyper::status::StatusCode::Created)
-                   .map_err(|err| format!("Error posting comment {}", err))?
-                   .to_owned())
+        Ok(
+            rest::post::<Comment>(
+                &url,
+                &body,
+                headers.headers,
+                &hyper::status::StatusCode::Created,
+            ).map_err(|err| format!("Error posting comment {}", err))?
+                .to_owned(),
+        )
     }
 
     fn edit_comment(&self, pr_id: i32, comment: &Comment, text: &str) -> Result<Comment, String> {
@@ -360,20 +388,23 @@ impl Bitbucket {
             .add_content_type_json_header();
 
         let body = serde_json::to_string(&CommentEdit {
-                                              text: text.to_owned(),
-                                              version: comment.version,
-                                          })
-                .map_err(|e| e.to_string())?;
-        let url = format!("{}/rest/api/latest/projects/{}/repos/{}/pull-requests/{}/comments/{}",
-                          self.credentials.base_url,
-                          self.credentials.project_slug,
-                          self.credentials.repo_slug,
-                          pr_id,
-                          comment.id);
+            text: text.to_owned(),
+            version: comment.version,
+        }).map_err(|e| e.to_string())?;
+        let url = format!(
+            "{}/rest/api/latest/projects/{}/repos/{}/pull-requests/{}/comments/{}",
+            self.credentials.base_url,
+            self.credentials.project_slug,
+            self.credentials.repo_slug,
+            pr_id,
+            comment.id
+        );
 
-        Ok(rest::put::<Comment>(&url, &body, headers.headers, &hyper::status::StatusCode::Ok)
-               .map_err(|err| format!("Error posting comment {}", err))?
-               .to_owned())
+        Ok(
+            rest::put::<Comment>(&url, &body, headers.headers, &hyper::status::StatusCode::Ok)
+                .map_err(|err| format!("Error posting comment {}", err))?
+                .to_owned(),
+        )
 
     }
 
@@ -386,14 +417,20 @@ impl Bitbucket {
             .add_accept_json_header()
             .add_content_type_json_header();
 
-        let body = serde_json::to_string(&bitbucket_build)
-            .map_err(|e| e.to_string())?;
-        let url = format!("{}/rest/build-status/1.0/commits/{}",
-                          self.credentials.base_url,
-                          pr.from_commit);
+        let body = serde_json::to_string(&bitbucket_build).map_err(
+            |e| e.to_string(),
+        )?;
+        let url = format!(
+            "{}/rest/build-status/1.0/commits/{}",
+            self.credentials.base_url,
+            pr.from_commit
+        );
 
-        let response = rest::post_raw(&url, &body, headers.headers)
-            .map_err(|err| format!("Error posting build {}", err))?;
+        let response = rest::post_raw(&url, &body, headers.headers).map_err(
+            |err| {
+                format!("Error posting build {}", err)
+            },
+        )?;
         match response.status() {
             status if status == &hyper::status::StatusCode::NoContent => Ok(bitbucket_build),
             e => Err(e.to_string()),
@@ -411,10 +448,10 @@ impl Bitbucket {
             _ => BuildState::INPROGRESS,
         };
 
-        let description = build
-            .status_text
-            .as_ref()
-            .map_or_else(|| "".to_string(), |s| s.to_string());
+        let description = build.status_text.as_ref().map_or_else(
+            || "".to_string(),
+            |s| s.to_string(),
+        );
 
         Build {
             state: build_status.to_owned(),
@@ -427,82 +464,104 @@ impl Bitbucket {
 }
 
 fn browse_url(base: &str, project_slug: &str, repo_slug: &str, reference: &str) -> String {
-    format!("{}/projects/{}/repos/{}/browse?at={}",
-            base,
-            project_slug,
-            repo_slug,
-            reference)
+    format!(
+        "{}/projects/{}/repos/{}/browse?at={}",
+        base,
+        project_slug,
+        repo_slug,
+        reference
+    )
 }
 
 fn commit_url(base: &str, project_slug: &str, repo_slug: &str, commit: &str) -> String {
-    format!("{}/projects/{}/repos/{}/commits/{}",
-            base,
-            project_slug,
-            repo_slug,
-            commit)
+    format!(
+        "{}/projects/{}/repos/{}/commits/{}",
+        base,
+        project_slug,
+        repo_slug,
+        commit
+    )
 }
 
 fn make_queued_comment(build: &::BuildDetails, pr: &::PullRequest, config: &BitbucketCredentials) -> String {
-    let reference_url = browse_url(&config.base_url,
-                                   &config.project_slug,
-                                   &config.repo_slug,
-                                   &pr.from_ref);
-    let commit_url = commit_url(&config.base_url,
-                                &config.project_slug,
-                                &config.repo_slug,
-                                &pr.from_commit);
-    format!("⏳ [Build]({build_url}) for [{reference}]({reference_url}) ([{commit}]({commit_url})) queued",
-            build_url = build.web_url,
-            reference = pr.from_ref,
-            reference_url = reference_url,
-            commit = pr.from_commit,
-            commit_url = commit_url)
+    let reference_url = browse_url(
+        &config.base_url,
+        &config.project_slug,
+        &config.repo_slug,
+        &pr.from_ref,
+    );
+    let commit_url = commit_url(
+        &config.base_url,
+        &config.project_slug,
+        &config.repo_slug,
+        &pr.from_commit,
+    );
+    format!(
+        "⏳ [Build]({build_url}) for [{reference}]({reference_url}) ([{commit}]({commit_url})) queued",
+        build_url = build.web_url,
+        reference = pr.from_ref,
+        reference_url = reference_url,
+        commit = pr.from_commit,
+        commit_url = commit_url
+    )
 }
 
 fn make_success_comment(build: &::BuildDetails, pr: &::PullRequest, config: &BitbucketCredentials) -> String {
-    let reference_url = browse_url(&config.base_url,
-                                   &config.project_slug,
-                                   &config.repo_slug,
-                                   &pr.from_ref);
-    let commit_url = commit_url(&config.base_url,
-                                &config.project_slug,
-                                &config.repo_slug,
-                                &pr.from_commit);
-    let status_text = build
-        .status_text
-        .as_ref()
-        .map_or_else(|| "".to_string(), |s| s.to_string());
+    let reference_url = browse_url(
+        &config.base_url,
+        &config.project_slug,
+        &config.repo_slug,
+        &pr.from_ref,
+    );
+    let commit_url = commit_url(
+        &config.base_url,
+        &config.project_slug,
+        &config.repo_slug,
+        &pr.from_commit,
+    );
+    let status_text = build.status_text.as_ref().map_or_else(
+        || "".to_string(),
+        |s| s.to_string(),
+    );
 
-    format!("✔️ [Build]({build_url}) for [{reference}]({reference_url}) ([{commit}]({commit_url})) \
+    format!(
+        "✔️ [Build]({build_url}) for [{reference}]({reference_url}) ([{commit}]({commit_url})) \
                 is **successful**: {build_message}",
-            build_url = build.web_url,
-            reference = pr.from_ref,
-            reference_url = reference_url,
-            commit = pr.from_commit,
-            commit_url = commit_url,
-            build_message = status_text)
+        build_url = build.web_url,
+        reference = pr.from_ref,
+        reference_url = reference_url,
+        commit = pr.from_commit,
+        commit_url = commit_url,
+        build_message = status_text
+    )
 }
 
 fn make_failure_comment(build: &::BuildDetails, pr: &::PullRequest, config: &BitbucketCredentials) -> String {
-    let reference_url = browse_url(&config.base_url,
-                                   &config.project_slug,
-                                   &config.repo_slug,
-                                   &pr.from_ref);
-    let commit_url = commit_url(&config.base_url,
-                                &config.project_slug,
-                                &config.repo_slug,
-                                &pr.from_commit);
-    let status_text = build
-        .status_text
-        .as_ref()
-        .map_or_else(|| "".to_string(), |s| s.to_string());
+    let reference_url = browse_url(
+        &config.base_url,
+        &config.project_slug,
+        &config.repo_slug,
+        &pr.from_ref,
+    );
+    let commit_url = commit_url(
+        &config.base_url,
+        &config.project_slug,
+        &config.repo_slug,
+        &pr.from_commit,
+    );
+    let status_text = build.status_text.as_ref().map_or_else(
+        || "".to_string(),
+        |s| s.to_string(),
+    );
 
-    format!("❌ [Build]({build_url}) for [{reference}]({reference_url}) ([{commit}]({commit_url})) \
+    format!(
+        "❌ [Build]({build_url}) for [{reference}]({reference_url}) ([{commit}]({commit_url})) \
                 has **failed**: {build_message}",
-            build_url = build.web_url,
-            reference = pr.from_ref,
-            reference_url = reference_url,
-            commit = pr.from_commit,
-            commit_url = commit_url,
-            build_message = status_text)
+        build_url = build.web_url,
+        reference = pr.from_ref,
+        reference_url = reference_url,
+        commit = pr.from_commit,
+        commit_url = commit_url,
+        build_message = status_text
+    )
 }

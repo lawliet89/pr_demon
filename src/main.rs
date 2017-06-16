@@ -160,37 +160,41 @@ pub trait PrTransformer {
         Ok(())
     }
 
-    fn pre_build_retrieval(&self,
-                           pr: PullRequest,
-                           _repo: &Repository,
-                           _ci: &ContinuousIntegrator)
-                           -> Result<PullRequest, String> {
+    fn pre_build_retrieval(
+        &self,
+        pr: PullRequest,
+        _repo: &Repository,
+        _ci: &ContinuousIntegrator,
+    ) -> Result<PullRequest, String> {
         Ok(pr)
     }
 
-    fn pre_build_scheduling(&self,
-                            pr: PullRequest,
-                            _repo: &Repository,
-                            _ci: &ContinuousIntegrator)
-                            -> Result<PullRequest, String> {
+    fn pre_build_scheduling(
+        &self,
+        pr: PullRequest,
+        _repo: &Repository,
+        _ci: &ContinuousIntegrator,
+    ) -> Result<PullRequest, String> {
         Ok(pr)
     }
 
-    fn pre_build_checking(&self,
-                          pr: PullRequest,
-                          _build: &BuildDetails,
-                          _repo: &Repository,
-                          _ci: &ContinuousIntegrator)
-                          -> Result<PullRequest, String> {
+    fn pre_build_checking(
+        &self,
+        pr: PullRequest,
+        _build: &BuildDetails,
+        _repo: &Repository,
+        _ci: &ContinuousIntegrator,
+    ) -> Result<PullRequest, String> {
         Ok(pr)
     }
 
-    fn pre_build_status_posting(&self,
-                                pr: PullRequest,
-                                _build: &BuildDetails,
-                                _repo: &Repository,
-                                _ci: &ContinuousIntegrator)
-                                -> Result<PullRequest, String> {
+    fn pre_build_status_posting(
+        &self,
+        pr: PullRequest,
+        _build: &BuildDetails,
+        _repo: &Repository,
+        _ci: &ContinuousIntegrator,
+    ) -> Result<PullRequest, String> {
         Ok(pr)
     }
 
@@ -200,9 +204,9 @@ pub trait PrTransformer {
 }
 
 fn main() {
-    let args: Args = Docopt::new(USAGE)
-        .and_then(|d| d.decode())
-        .unwrap_or_else(|e| e.exit());
+    let args: Args = Docopt::new(USAGE).and_then(|d| d.decode()).unwrap_or_else(
+        |e| e.exit(),
+    );
 
     let logger_config = configure_logger(&args.flag_log_level);
     if let Err(e) = fern::init_global_logger(logger_config, log::LogLevelFilter::Debug) {
@@ -216,10 +220,12 @@ fn main() {
     if let Some(true) = config.stdout_broadcast {
         let subscriber = fanout.subscribe();
         thread::spawn(move || for message in subscriber.iter() {
-                          info!("Fanout broadcast received: {:?} {}",
-                                message.opcode,
-                                message.payload)
-                      });
+            info!(
+                "Fanout broadcast received: {:?} {}",
+                message.opcode,
+                message.payload
+            )
+        });
     }
 
     if let Some(ref address) = config.websocket {
@@ -262,12 +268,15 @@ fn main() {
 
                 for pr in &prs {
                     info!("{}Pull Request #{} ({})", prefix(1), pr.id, pr.web_url);
-                    if let Err(handled_pr) = handle_pull_request(pr.clone(),
-                                                                 &bitbucket,
-                                                                 &config.teamcity,
-                                                                 &*pr_transformer,
-                                                                 &fanout,
-                                                                 config.post_build) {
+                    if let Err(handled_pr) = handle_pull_request(
+                        pr.clone(),
+                        &bitbucket,
+                        &config.teamcity,
+                        &*pr_transformer,
+                        &fanout,
+                        config.post_build,
+                    )
+                    {
                         error!("{}{}", prefix(2), handled_pr);
                     }
                 }
@@ -289,21 +298,25 @@ fn main() {
             None => fixed_interval.unwrap(),
         };
 
-        info!("{} Sleeping for {} seconds",
-              prefix(0),
-              sleep_duration.as_secs());
+        info!(
+            "{} Sleeping for {} seconds",
+            prefix(0),
+            sleep_duration.as_secs()
+        );
         std::thread::sleep(sleep_duration);
     }
 }
 
 fn read_config<R>(path: &str, stdin: R) -> Result<Box<std::io::Read>, String>
-    where R: std::io::Read + 'static
+where
+    R: std::io::Read + 'static,
 {
     let reader: Box<std::io::Read> = match path {
         "-" => Box::new(stdin),
         path => {
-            Box::new(File::open(path)
-                         .map_err(|e| format!("Unable to read file because: {}", e))?)
+            Box::new(File::open(path).map_err(|e| {
+                format!("Unable to read file because: {}", e)
+            })?)
         }
     };
 
@@ -311,7 +324,8 @@ fn read_config<R>(path: &str, stdin: R) -> Result<Box<std::io::Read>, String>
 }
 
 fn parse_config<R>(reader: R) -> Result<Config, String>
-    where R: std::io::Read
+where
+    R: std::io::Read,
 {
     serde_yaml::from_reader(reader).map_err(|err| format!("Unable to decode YAML file {}", err))
 }
@@ -336,19 +350,23 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
                         Some(build)
                     }
                     Err(err) => {
-                        error!("{}Unable to retrieve information for build ID {}: {}",
-                               prefix(2),
-                               latest_build_id,
-                               err);
+                        error!(
+                            "{}Unable to retrieve information for build ID {}: {}",
+                            prefix(2),
+                            latest_build_id,
+                            err
+                        );
                         None
                     }
                 }
             }
         }
         Err(err) => {
-            warn!("{}Error fetching builds — queuing anyway: {}",
-                  prefix(2),
-                  err);
+            warn!(
+                "{}Error fetching builds — queuing anyway: {}",
+                prefix(2),
+                err
+            );
             None
         }
     };
@@ -362,9 +380,11 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
                         info!("{}Commit matches — skipping", prefix(2));
                         Some(build.to_owned())
                     } else {
-                        info!("{}Commit does not match with {} — scheduling build",
-                              prefix(2),
-                              commit);
+                        info!(
+                            "{}Commit does not match with {} — scheduling build",
+                            prefix(2),
+                            commit
+                        );
                         None
                     }
                 }
@@ -381,13 +401,14 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
     }
 }
 
-fn handle_pull_request(pr: PullRequest,
-                       repo: &Repository,
-                       ci: &ContinuousIntegrator,
-                       pr_transformer: &PrTransformer,
-                       fanout: &Fanout<Message>,
-                       post_build: bool)
-                       -> Result<(), String> {
+fn handle_pull_request(
+    pr: PullRequest,
+    repo: &Repository,
+    ci: &ContinuousIntegrator,
+    pr_transformer: &PrTransformer,
+    fanout: &Fanout<Message>,
+    post_build: bool,
+) -> Result<(), String> {
 
     fanout.broadcast(Message::new(OpCode::OpenPullRequest, &pr)?);
 
@@ -398,9 +419,9 @@ fn handle_pull_request(pr: PullRequest,
             fanout.broadcast(Message::new(OpCode::BuildNotFound, &pr)?);
             let pr = pr_transformer.pre_build_scheduling(pr, repo, ci)?;
             schedule_build(&pr, ci, repo).and_then(|build| {
-                                                       fanout.broadcast(Message::new(OpCode::BuildScheduled, &build)?);
-                                                       Ok(())
-                                                   })
+                fanout.broadcast(Message::new(OpCode::BuildScheduled, &build)?);
+                Ok(())
+            })
         }
         Some(build) => {
             fanout.broadcast(Message::new(OpCode::BuildFound, &build)?);
@@ -412,8 +433,12 @@ fn handle_pull_request(pr: PullRequest,
                     BuildState::Finished => OpCode::BuildFinished { success: build_status == BuildStatus::Success },
                 };
                 fanout.broadcast(Message::new(opcode, &build)?);
-                let pr = pr_transformer
-                    .pre_build_status_posting(pr, &build, repo, ci)?;
+                let pr = pr_transformer.pre_build_status_posting(
+                    pr,
+                    &build,
+                    repo,
+                    ci,
+                )?;
                 if post_build {
                     repo.post_build(&pr, &build)?;
                 }
@@ -438,31 +463,40 @@ fn schedule_build(pr: &PullRequest, ci: &ContinuousIntegrator, repo: &Repository
     }
 }
 
-fn check_build_status(pr: &PullRequest,
-                      build: &BuildDetails,
-                      repo: &Repository)
-                      -> Result<(BuildState, BuildStatus), String> {
+fn check_build_status(
+    pr: &PullRequest,
+    build: &BuildDetails,
+    repo: &Repository,
+) -> Result<(BuildState, BuildStatus), String> {
     info!("{}Build exists: {}", prefix(2), build.web_url);
     match build.state {
         BuildState::Finished => {
             match build.status {
                 BuildStatus::Success => {
-                    repo.build_success(pr, build)
-                        .and(Ok((BuildState::Finished, BuildStatus::Success)))
+                    repo.build_success(pr, build).and(Ok((
+                        BuildState::Finished,
+                        BuildStatus::Success,
+                    )))
                 }
                 ref status => {
-                    repo.build_failure(pr, build)
-                        .and(Ok((BuildState::Finished, status.to_owned())))
+                    repo.build_failure(pr, build).and(Ok((
+                        BuildState::Finished,
+                        status.to_owned(),
+                    )))
                 }
             }
         }
         BuildState::Running => {
-            repo.build_running(pr, build)
-                .and(Ok((BuildState::Running, build.status.to_owned())))
+            repo.build_running(pr, build).and(Ok((
+                BuildState::Running,
+                build.status.to_owned(),
+            )))
         }
         BuildState::Queued => {
-            repo.build_queued(pr, build)
-                .and(Ok((BuildState::Queued, build.status.to_owned())))
+            repo.build_queued(pr, build).and(Ok((
+                BuildState::Queued,
+                build.status.to_owned(),
+            )))
         }
     }
 }
@@ -479,17 +513,21 @@ fn to_option_str(opt: &Option<String>) -> Option<&str> {
 fn configure_logger<'a>(log_level: &Option<String>) -> fern::DispatchConfig<'a> {
     let log_level = resolve_log_level(log_level)
         .or_else(|| {
-                     panic!("Unknown log level `{}``", log_level.as_ref().unwrap());
-                 })
+            panic!("Unknown log level `{}``", log_level.as_ref().unwrap());
+        })
         .unwrap();
 
     fern::DispatchConfig {
-        format: Box::new(|msg: &str, level: &log::LogLevel, _location: &log::LogLocation| {
-                             format!("[{}][{}] {}",
-                                     time::now().strftime("%FT%T%z").unwrap(),
-                                     level,
-                                     msg)
-                         }),
+        format: Box::new(|msg: &str,
+         level: &log::LogLevel,
+         _location: &log::LogLocation| {
+            format!(
+                "[{}][{}] {}",
+                time::now().strftime("%FT%T%z").unwrap(),
+                level,
+                msg
+            )
+        }),
         output: vec![fern::OutputConfig::stdout()],
         level: log_level,
     }
@@ -643,8 +681,9 @@ mod tests {
     fn it_reads_from_config_file() {
         let mut expected = String::new();
         if let Err(err) = File::open("tests/fixtures/config.yaml")
-               .unwrap()
-               .read_to_string(&mut expected) {
+            .unwrap()
+            .read_to_string(&mut expected)
+        {
             panic!("Unable to read fixture: {}", err);
         }
         let mut reader = read_config("tests/fixtures/config.yaml", Cursor::new("")).unwrap();
@@ -683,21 +722,21 @@ mod tests {
                 base_url: "https://www.foobar.com/rest".to_string(),
             },
             fusionner: Some(::transformer::FusionnerConfiguration {
-                                notes_namespace: Some("foobar".to_string()),
-                                push: Some(true),
-                                repository: ::fusionner::RepositoryConfiguration {
-                                    uri: "https://www.example.com/stash/scm/eg/foobar.git".to_string(),
-                                    username: Some("username".to_string()),
-                                    password: Some(fusionner::Password::new("password")),
-                                    key: None,
-                                    key_passphrase: None,
-                                    checkout_path: "target/test_repo".to_string(),
-                                    fetch_refspecs: vec![],
-                                    push_refspecs: vec![],
-                                    signature_name: Some("pr_demon".to_string()),
-                                    signature_email: Some("pr_demon@example.com".to_string()),
-                                },
-                            }),
+                notes_namespace: Some("foobar".to_string()),
+                push: Some(true),
+                repository: ::fusionner::RepositoryConfiguration {
+                    uri: "https://www.example.com/stash/scm/eg/foobar.git".to_string(),
+                    username: Some("username".to_string()),
+                    password: Some(fusionner::Password::new("password")),
+                    key: None,
+                    key_passphrase: None,
+                    checkout_path: "target/test_repo".to_string(),
+                    fetch_refspecs: vec![],
+                    push_refspecs: vec![],
+                    signature_name: Some("pr_demon".to_string()),
+                    signature_email: Some("pr_demon@example.com".to_string()),
+                },
+            }),
             run_interval: Interval::Fixed { interval: 999u64 },
             stdout_broadcast: Some(false),
             post_build: false,

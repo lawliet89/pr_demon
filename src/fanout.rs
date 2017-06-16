@@ -26,27 +26,29 @@ pub struct Message {
 
 impl Message {
     pub fn new<T>(opcode: OpCode, payload: &T) -> Result<Message, String>
-        where T: Serialize
+    where
+        T: Serialize,
     {
-        let encoded = serde_json::to_value(&payload)
-            .map_err(|e| e.to_string())?;
+        let encoded = serde_json::to_value(&payload).map_err(|e| e.to_string())?;
         Ok(Message {
-               opcode: opcode,
-               payload: encoded,
-           })
+            opcode: opcode,
+            payload: encoded,
+        })
     }
 }
 
 #[derive(Clone)]
 pub struct Fanout<T>
-    where T: 'static + Send + Sync + Clone
+where
+    T: 'static + Send + Sync + Clone,
 {
     broadcast_tx: Sender<T>,
     pub subscribers: Arc<Mutex<Vec<Sender<T>>>>,
 }
 
 impl<T> Fanout<T>
-    where T: 'static + Send + Sync + Clone
+where
+    T: 'static + Send + Sync + Clone,
 {
     pub fn new() -> Fanout<T> {
         let (broadcast_tx, broadcast_rx) = channel::<T>();
@@ -136,18 +138,22 @@ mod tests {
 
         fanout.broadcast(expected_message.clone());
 
-        timeout_ms(move || {
-                       let message = subscriber_one.recv();
-                       assert_eq!(expected_message, message.unwrap());
-                   },
-                   TIMEOUT);
+        timeout_ms(
+            move || {
+                let message = subscriber_one.recv();
+                assert_eq!(expected_message, message.unwrap());
+            },
+            TIMEOUT,
+        );
 
 
-        timeout_ms(move || {
-                       let message = subscriber_two.recv();
-                       assert_eq!(expected_message_clone, message.unwrap());
-                   },
-                   TIMEOUT);
+        timeout_ms(
+            move || {
+                let message = subscriber_two.recv();
+                assert_eq!(expected_message_clone, message.unwrap());
+            },
+            TIMEOUT,
+        );
     }
 
     #[test]
@@ -164,11 +170,13 @@ mod tests {
 
         fanout.broadcast(expected_message.clone());
 
-        timeout_ms(move || {
-                       let message = subscriber_one.recv();
-                       assert_eq!(expected_message, message.unwrap());
-                   },
-                   TIMEOUT);
+        timeout_ms(
+            move || {
+                let message = subscriber_one.recv();
+                assert_eq!(expected_message, message.unwrap());
+            },
+            TIMEOUT,
+        );
 
         assert_eq!(fanout.subscribers.lock().unwrap().len(), 1);
     }
