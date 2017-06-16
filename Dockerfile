@@ -1,16 +1,17 @@
-FROM lawliet89/debian-rust:1.16.0
-MAINTAINER Yong Wen Chua <me@yongwen.xyz>
+FROM lawliet89/docker-rust:1.18.0 as builder
 
-RUN apt-get update \
-    && apt-get install -y cmake pkg-config
-
+ARG ARCHITECTURE=x86_64-unknown-linux-musl
+WORKDIR /app/src
 COPY Cargo.toml Cargo.lock ./
-RUN cargo fetch --locked
+RUN cargo fetch --locked -v
 
-COPY . ./
-RUN cargo build --release --locked
+COPY ./ ./
+RUN cargo build --release --target "${ARCHITECTURE}" -v --frozen
 
-VOLUME /app/src/config
+# Runtime Image
 
-ENTRYPOINT ["cargo"]
-CMD ["run", "--release", "--", "/app/src/config/config.yml"]
+FROM alpine:3.5
+ARG ARCHITECTURE=x86_64-unknown-linux-musl
+WORKDIR /app
+COPY --from=builder /app/src/target/${ARCHITECTURE}/release/pr_demon .
+CMD ["/app/pr_demon", "/app/src/config/config.yml"]
