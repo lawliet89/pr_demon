@@ -1,7 +1,7 @@
-use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
+use hyper::mime::{Attr, Mime, SubLevel, TopLevel, Value};
 use reqwest;
-use reqwest::{Client, Method, Error, Response, StatusCode};
-use reqwest::header::{Authorization, Basic, Accept, qitem, ContentType, UserAgent};
+use reqwest::{Client, Error, Method, Response, StatusCode};
+use reqwest::header::{qitem, Accept, Authorization, Basic, ContentType, UserAgent};
 use serde::de::DeserializeOwned;
 use serde_json;
 
@@ -11,7 +11,9 @@ pub struct Headers {
 
 impl Headers {
     pub fn new() -> Headers {
-        let mut headers = Headers { headers: reqwest::header::Headers::new() };
+        let mut headers = Headers {
+            headers: reqwest::header::Headers::new(),
+        };
         headers.add_pr_demon_user_agent();
         headers
     }
@@ -102,7 +104,6 @@ fn request_raw(
     body: &Option<String>,
     headers: reqwest::header::Headers,
 ) -> Result<Response, Error> {
-
     debug!("Requesting {} with {}", url, headers);
     let client = Client::new()?;
     let request_builder = client.request(method, url);
@@ -125,9 +126,7 @@ fn request<T>(
 where
     T: DeserializeOwned,
 {
-    let response = request_raw(url, method, body, headers).map_err(
-        |err| err.to_string(),
-    )?;
+    let response = request_raw(url, method, body, headers).map_err(|err| err.to_string())?;
     match response.status() {
         status if status == status_code => (),
         e => return Err(e.to_string()),

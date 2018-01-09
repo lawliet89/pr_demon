@@ -1,4 +1,4 @@
-use std::sync::mpsc::{channel, Sender, Receiver};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::spawn;
 use std::marker::Send;
@@ -145,7 +145,6 @@ mod tests {
             },
             TIMEOUT,
         );
-
 
         timeout_ms(
             move || {

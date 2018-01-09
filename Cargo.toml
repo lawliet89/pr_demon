@@ -5,11 +5,10 @@ authors = ["Yong Wen Chua <me@yongwen.xyz>"]
 
 [[bin]]
 name = "pr_demon"
+path = "src/main.rs"
 test = true
 
 [dependencies]
-chrono = "0.3"
-cron = "0.0.2"
 docopt = "0.7.0"
 fern = "0.3"
 fusionner = { git = "https://github.com/lawliet89/fusionner", rev = "f854484adc0635a21cddda183a7bb64118490547" }

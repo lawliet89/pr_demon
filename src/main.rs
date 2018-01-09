@@ -3,8 +3,6 @@ extern crate log;
 #[macro_use]
 extern crate serde_derive;
 
-extern crate chrono;
-extern crate cron;
 extern crate docopt;
 extern crate fern;
 extern crate fusionner;
@@ -12,9 +10,9 @@ extern crate git2;
 extern crate hyper;
 extern crate reqwest;
 extern crate rustc_serialize;
+extern crate serde;
 extern crate serde_json;
 extern crate serde_yaml;
-extern crate serde;
 extern crate time;
 extern crate url;
 extern crate ws;
@@ -35,8 +33,6 @@ use std::iter;
 use std::boxed::Box;
 use std::thread;
 
-use chrono::*;
-use cron::CronSchedule;
 use docopt::Docopt;
 
 use fanout::{Fanout, Message, OpCode};
@@ -204,9 +200,9 @@ pub trait PrTransformer {
 }
 
 fn main() {
-    let args: Args = Docopt::new(USAGE).and_then(|d| d.decode()).unwrap_or_else(
-        |e| e.exit(),
-    );
+    let args: Args = Docopt::new(USAGE)
+        .and_then(|d| d.decode())
+        .unwrap_or_else(|e| e.exit());
 
     let logger_config = configure_logger(&args.flag_log_level);
     if let Err(e) = fern::init_global_logger(logger_config, log::LogLevelFilter::Debug) {
@@ -219,12 +215,13 @@ fn main() {
     let mut fanout = Fanout::<Message>::new();
     if let Some(true) = config.stdout_broadcast {
         let subscriber = fanout.subscribe();
-        thread::spawn(move || for message in subscriber.iter() {
-            info!(
-                "Fanout broadcast received: {:?} {}",
-                message.opcode,
-                message.payload
-            )
+        thread::spawn(move || {
+            for message in subscriber.iter() {
+                info!(
+                    "Fanout broadcast received: {:?} {}",
+                    message.opcode, message.payload
+                )
+            }
         });
     }
 
@@ -247,12 +244,11 @@ fn main() {
         None => Box::new(transformer::NoOp {}),
     };
 
-    let mut fixed_interval: Option<std::time::Duration> = None;
-    let mut schedule: Option<CronSchedule> = None;
-
-    match config.run_interval {
-        Interval::Cron { expression } => schedule = Some(CronSchedule::parse(expression).unwrap()),
-        Interval::Fixed { interval } => fixed_interval = Some(std::time::Duration::new(interval, 0)),
+    let sleep_interval = match config.run_interval {
+        Interval::Cron { .. } => {
+            unimplemented!("Cron is not implemented at the moment");
+        }
+        Interval::Fixed { interval } => std::time::Duration::new(interval, 0),
     };
 
     loop {
@@ -275,8 +271,7 @@ fn main() {
                         &*pr_transformer,
                         &fanout,
                         config.post_build,
-                    )
-                    {
+                    ) {
                         error!("{}{}", prefix(2), handled_pr);
                     }
                 }
@@ -287,16 +282,7 @@ fn main() {
             }
         };
 
-        let sleep_duration = match schedule {
-            Some(ref sch) => {
-                // TODO: Fix these unwrapping
-                (sch.next_utc().unwrap())
-                    .signed_duration_since(UTC::now())
-                    .to_std()
-                    .unwrap()
-            }
-            None => fixed_interval.unwrap(),
-        };
+        let sleep_duration = sleep_interval;
 
         info!(
             "{} Sleeping for {} seconds",
@@ -313,11 +299,7 @@ where
 {
     let reader: Box<std::io::Read> = match path {
         "-" => Box::new(stdin),
-        path => {
-            Box::new(File::open(path).map_err(|e| {
-                format!("Unable to read file because: {}", e)
-            })?)
-        }
+        path => Box::new(File::open(path).map_err(|e| format!("Unable to read file because: {}", e))?),
     };
 
     Ok(reader)
@@ -373,31 +355,29 @@ fn get_latest_build(pr: &PullRequest, ci: &ContinuousIntegrator) -> Option<Build
 
     match latest_build {
         None => None,
-        Some(ref build) => {
-            match build.commit {
-                Some(ref commit) => {
-                    if commit == pr_commit {
-                        info!("{}Commit matches — skipping", prefix(2));
-                        Some(build.to_owned())
-                    } else {
-                        info!(
-                            "{}Commit does not match with {} — scheduling build",
-                            prefix(2),
-                            commit
-                        );
-                        None
-                    }
-                }
-                None if build.state == BuildState::Queued => {
-                    info!("{}Build is queued — skipping", prefix(2));
+        Some(ref build) => match build.commit {
+            Some(ref commit) => {
+                if commit == pr_commit {
+                    info!("{}Commit matches — skipping", prefix(2));
                     Some(build.to_owned())
-                }
-                _ => {
-                    warn!("{}Unknown error — scheduling build", prefix(2));
+                } else {
+                    info!(
+                        "{}Commit does not match with {} — scheduling build",
+                        prefix(2),
+                        commit
+                    );
                     None
                 }
             }
-        }
+            None if build.state == BuildState::Queued => {
+                info!("{}Build is queued — skipping", prefix(2));
+                Some(build.to_owned())
+            }
+            _ => {
+                warn!("{}Unknown error — scheduling build", prefix(2));
+                None
+            }
+        },
     }
 }
 
@@ -409,7 +389,6 @@ fn handle_pull_request(
     fanout: &Fanout<Message>,
     post_build: bool,
 ) -> Result<(), String> {
-
     fanout.broadcast(Message::new(OpCode::OpenPullRequest, &pr)?);
 
     let pr = pr_transformer.pre_build_retrieval(pr, repo, ci)?;
@@ -430,15 +409,12 @@ fn handle_pull_request(
                 let opcode = match build_state {
                     BuildState::Queued => OpCode::BuildQueued,
                     BuildState::Running => OpCode::BuildRunning,
-                    BuildState::Finished => OpCode::BuildFinished { success: build_status == BuildStatus::Success },
+                    BuildState::Finished => OpCode::BuildFinished {
+                        success: build_status == BuildStatus::Success,
+                    },
                 };
                 fanout.broadcast(Message::new(opcode, &build)?);
-                let pr = pr_transformer.pre_build_status_posting(
-                    pr,
-                    &build,
-                    repo,
-                    ci,
-                )?;
+                let pr = pr_transformer.pre_build_status_posting(pr, &build, repo, ci)?;
                 if post_build {
                     repo.post_build(&pr, &build)?;
                 }
@@ -470,34 +446,16 @@ fn check_build_status(
 ) -> Result<(BuildState, BuildStatus), String> {
     info!("{}Build exists: {}", prefix(2), build.web_url);
     match build.state {
-        BuildState::Finished => {
-            match build.status {
-                BuildStatus::Success => {
-                    repo.build_success(pr, build).and(Ok((
-                        BuildState::Finished,
-                        BuildStatus::Success,
-                    )))
-                }
-                ref status => {
-                    repo.build_failure(pr, build).and(Ok((
-                        BuildState::Finished,
-                        status.to_owned(),
-                    )))
-                }
-            }
-        }
-        BuildState::Running => {
-            repo.build_running(pr, build).and(Ok((
-                BuildState::Running,
-                build.status.to_owned(),
-            )))
-        }
-        BuildState::Queued => {
-            repo.build_queued(pr, build).and(Ok((
-                BuildState::Queued,
-                build.status.to_owned(),
-            )))
-        }
+        BuildState::Finished => match build.status {
+            BuildStatus::Success => repo.build_success(pr, build)
+                .and(Ok((BuildState::Finished, BuildStatus::Success))),
+            ref status => repo.build_failure(pr, build)
+                .and(Ok((BuildState::Finished, status.to_owned()))),
+        },
+        BuildState::Running => repo.build_running(pr, build)
+            .and(Ok((BuildState::Running, build.status.to_owned()))),
+        BuildState::Queued => repo.build_queued(pr, build)
+            .and(Ok((BuildState::Queued, build.status.to_owned()))),
     }
 }
 
@@ -518,16 +476,16 @@ fn configure_logger<'a>(log_level: &Option<String>) -> fern::DispatchConfig<'a> 
         .unwrap();
 
     fern::DispatchConfig {
-        format: Box::new(|msg: &str,
-         level: &log::LogLevel,
-         _location: &log::LogLocation| {
-            format!(
-                "[{}][{}] {}",
-                time::now().strftime("%FT%T%z").unwrap(),
-                level,
-                msg
-            )
-        }),
+        format: Box::new(
+            |msg: &str, level: &log::LogLevel, _location: &log::LogLocation| {
+                format!(
+                    "[{}][{}] {}",
+                    time::now().strftime("%FT%T%z").unwrap(),
+                    level,
+                    msg
+                )
+            },
+        ),
         output: vec![fern::OutputConfig::stdout()],
         level: log_level,
     }
@@ -546,13 +504,13 @@ fn resolve_log_level(log_level: &Option<String>) -> Option<log::LogLevelFilter> 
 
 #[cfg(test)]
 mod tests {
-    use super::{bitbucket, teamcity, Config, Interval, PullRequest, ContinuousIntegrator, Build};
-    use super::{BuildDetails, BuildStatus, BuildState, Repository, User};
-    use super::{read_config, parse_config, get_latest_build, schedule_build};
+    use super::{bitbucket, teamcity, Build, Config, ContinuousIntegrator, Interval, PullRequest};
+    use super::{BuildDetails, BuildState, BuildStatus, Repository, User};
+    use super::{get_latest_build, parse_config, read_config, schedule_build};
     use super::check_build_status;
 
     use std::fs::File;
-    use std::io::{Read, Cursor};
+    use std::io::{Cursor, Read};
     use fusionner;
 
     struct StubBuild {
@@ -662,7 +620,6 @@ mod tests {
             status_text: None,
         }
     }
-
 
     fn build_failure() -> BuildDetails {
         BuildDetails {

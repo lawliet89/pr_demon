@@ -229,24 +229,17 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
         );
         let url = format!(
             "{}/buildTypes/id:{}/builds?locator={}",
-            self.base_url,
-            self.build_id,
-            locator
+            self.base_url, self.build_id, locator
         );
 
-        let build_list = rest::get::<BuildList>(&url, headers.headers).map_err(
-            |err| {
-                format!("Error getting list of builds {}", err)
-            },
-        )?;
+        let build_list = rest::get::<BuildList>(&url, headers.headers)
+            .map_err(|err| format!("Error getting list of builds {}", err))?;
         Ok(match build_list.build {
             None => vec![],
-            Some(ref builds) => {
-                builds
-                    .iter()
-                    .map(|build| ::Build { id: build.id })
-                    .collect()
-            }
+            Some(ref builds) => builds
+                .iter()
+                .map(|build| ::Build { id: build.id })
+                .collect(),
         })
     }
 
@@ -258,9 +251,7 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
 
         let url = format!("{}/builds/id:{}", self.base_url, build_id);
 
-        let build = rest::get::<Build>(&url, headers.headers).map_err(|err| {
-            format!("Error getting build {}", err)
-        })?;
+        let build = rest::get::<Build>(&url, headers.headers).map_err(|err| format!("Error getting build {}", err))?;
         Ok(build.to_build_details())
     }
 
@@ -295,13 +286,11 @@ impl ::ContinuousIntegrator for TeamcityCredentials {
 
         let url = format!(
             "{}/vcs-root-instances/checkingForChangesQueue?locator=buildType(id:{})",
-            self.base_url,
-            self.build_id
+            self.base_url, self.build_id
         );
 
-        let response = rest::post_raw(&url, "", headers.headers).map_err(|err| {
-            format!("Error requesting for VCS fetch {}", err)
-        })?;
+        let response =
+            rest::post_raw(&url, "", headers.headers).map_err(|err| format!("Error requesting for VCS fetch {}", err))?;
         match response.status() {
             status if status == &hyper::status::StatusCode::Ok => Ok(()),
             e => Err(e.to_string()),

@@ -75,9 +75,7 @@ impl<'repo> Fusionner<'repo> {
     fn make_namer<'cb>(pr: &::PullRequest) -> Box<fusionner::merger::MergeReferenceNamerCallback<'cb>> {
         let pr_id = pr.id;
 
-        Box::new(move |_reference, _target_reference, _oid, _target_oid| {
-            format!("refs/pull/{}/merge", pr_id)
-        })
+        Box::new(move |_reference, _target_reference, _oid, _target_oid| format!("refs/pull/{}/merge", pr_id))
     }
 }
 
@@ -85,7 +83,13 @@ impl<'repo> Fusionner<'repo> {
     fn merge(
         &self,
         pr: &::PullRequest,
-    ) -> Result<(fusionner::merger::Merge, fusionner::merger::ShouldMergeResult), String> {
+    ) -> Result<
+        (
+            fusionner::merger::Merge,
+            fusionner::merger::ShouldMergeResult,
+        ),
+        String,
+    > {
         let mut merger = map_err!(Self::make_merger(
             &self.repo,
             to_option_str(&self.config.notes_namespace),
@@ -97,13 +101,7 @@ impl<'repo> Fusionner<'repo> {
         let reference = &pr.from_ref;
         let target_ref = &pr.to_ref;
 
-        map_err!(merger.check_and_merge(
-            oid,
-            target_oid,
-            reference,
-            target_ref,
-            false,
-        ))
+        map_err!(merger.check_and_merge(oid, target_oid, reference, target_ref, false,))
     }
 }
 
@@ -152,7 +150,6 @@ impl<'repo> ::PrTransformer for Fusionner<'repo> {
                     }
                 }
             };
-
         }
 
         if self.config.push != Some(false) {
@@ -468,17 +465,9 @@ mod tests {
         };
 
         let transformer = not_err!(transformer::Fusionner::new(&transformer_config));
-        not_err!(transformer.prepare(
-            &[pr.clone()],
-            &StubRepository {},
-            &StubCi {},
-        ));
+        not_err!(transformer.prepare(&[pr.clone()], &StubRepository {}, &StubCi {},));
 
-        let transformed_pr = not_err!(transformer.pre_build_retrieval(
-            pr,
-            &StubRepository {},
-            &StubCi {},
-        ));
+        let transformed_pr = not_err!(transformer.pre_build_retrieval(pr, &StubRepository {}, &StubCi {},));
 
         assert_eq!("refs/pull/1/merge", transformed_pr.from_ref);
         assert!(transformed_pr.from_commit != format!("{}", branch_oid));
@@ -534,23 +523,14 @@ mod tests {
             None,
             Some(&pr),
         ));
-        let (merge, _should_merge) = not_err!(merger.check_and_merge(
-            branch_oid,
-            oid,
-            reference,
-            target_reference,
-            false,
-        ));
+        let (merge, _should_merge) =
+            not_err!(merger.check_and_merge(branch_oid, oid, reference, target_reference, false,));
 
         let (actual_merge, _should_merge) = not_err!(transformer.merge(&pr));
         assert_eq!(merge.merge_oid, actual_merge.merge_oid);
         assert_eq!(merge.merge_reference, actual_merge.merge_reference);
 
-        let transformed_pr = not_err!(transformer.pre_build_retrieval(
-            pr,
-            &StubRepository {},
-            &StubCi {},
-        ));
+        let transformed_pr = not_err!(transformer.pre_build_retrieval(pr, &StubRepository {}, &StubCi {},));
 
         assert_eq!(merge.merge_oid, transformed_pr.from_commit);
         assert_eq!(merge.merge_reference, transformed_pr.from_ref);
@@ -580,19 +560,9 @@ mod tests {
             None,
             Some(&pr),
         ));
-        let _merge = not_err!(merger.check_and_merge(
-            branch_oid,
-            oid,
-            reference,
-            target_reference,
-            false,
-        ));
+        let _merge = not_err!(merger.check_and_merge(branch_oid, oid, reference, target_reference, false,));
 
-        let transformed_pr = not_err!(transformer.pre_build_retrieval(
-            pr,
-            &StubRepository {},
-            &StubCi {},
-        ));
+        let transformed_pr = not_err!(transformer.pre_build_retrieval(pr, &StubRepository {}, &StubCi {},));
 
         let build_details = ::BuildDetails {
             id: 0,
