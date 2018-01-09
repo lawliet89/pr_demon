@@ -4,4 +4,5 @@ services:
     build: .
     restart: "always"
     volumes:
-      - ./config:/app/src/config
+      - ./config:/app/config
+    command: ["/app/pr_demon", "/app/config/config.yaml"]
