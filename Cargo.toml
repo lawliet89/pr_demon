@@ -11,8 +11,8 @@ test = true
 [dependencies]
 docopt = "0.7.0"
 fern = "0.3"
-fusionner = { git = "https://github.com/lawliet89/fusionner", rev = "f854484adc0635a21cddda183a7bb64118490547" }
-git2 = "0.6.6"
+fusionner = { git = "https://github.com/lawliet89/fusionner", rev = "f20bc1a26066feb1ede1fe8072f7420af2e79a4c" }
+git2 = "0.7"
 hyper = "0.10"
 log = "0.3"
 reqwest = "0.6.2"
